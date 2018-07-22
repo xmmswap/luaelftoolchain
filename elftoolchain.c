@@ -106,19 +106,16 @@ err:
 	return 3;
 }
 
+/*
+ * XXX Extract EI_CLASS EI_DATA EI_VERSION EI_OSABI EI_ABIVERSION from e_ident.
+ * XXX Convert e_type and e_machine to strings.
+ */
 static int
-l_elf_getehdr(lua_State *L)
+init_ehdr_push(lua_State *L, struct udataElf *ud, int elf_arg)
 {
-	struct udataElf *ud;
 	int err;
 
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr != NULL) {
-		/* Already cached in userdata. */
-		lua_getuservalue(L, 1);
-		return 1;
-	}
+	assert(ud->ehdr == NULL);
 
 	ud->ehdr = elf32_getehdr(ud->elf);
 	err = elf_errno();
@@ -210,7 +207,405 @@ l_elf_getehdr(lua_State *L)
 
 	/* Cache in userdata. */
 	lua_pushvalue(L, -1);
-	lua_setuservalue(L, 1);
+	lua_setuservalue(L, elf_arg);
+
+	return 1;
+}
+
+static int
+l_elf_getehdr(lua_State *L)
+{
+	struct udataElf *ud;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr != NULL) {
+		/* Already cached in userdata. */
+		lua_getuservalue(L, 1);
+		return 1;
+	}
+
+	return init_ehdr_push(L, ud, 1);
+}
+
+static int
+l_elf_class(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	lua_pushstring(L, (ud->flags & EHDR64) ? "ELFCLASS64" : "ELFCLASS32");
+
+	return 1;
+}
+
+static int
+l_elf_ident(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushlstring(L, (const char *)h->e_ident, ELF_NIDENT);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushlstring(L, (const char *)h->e_ident, ELF_NIDENT);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_type(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_type);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_type);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_machine(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_machine);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_machine);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_version(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_version);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_version);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_entry(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_entry);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_entry);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_phoff(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_phoff);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_phoff);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_shoff(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_shoff);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_shoff);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_flags(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_flags);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_flags);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_ehsize(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_ehsize);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_ehsize);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_phentsize(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_phentsize);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_phentsize);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_phnum(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_phnum);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_phnum);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_shentsize(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_shentsize);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_shentsize);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_shnum(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_shnum);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_shnum);
+	}
+
+	return 1;
+}
+
+static int
+l_elf_shstrndx(lua_State *L)
+{
+	struct udataElf *ud;
+	int num_pushed;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
+		return num_pushed; /* nil, errmsg, errno. */
+
+	assert(ud->ehdr != NULL);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_shstrndx);
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushinteger(L, h->e_shstrndx);
+	}
 
 	return 1;
 }
@@ -356,6 +751,21 @@ static luaL_Reg elftoolchain[] = {
 	{ "elf_end", l_elf_gc },
 	{ "nextscn", l_elf_nextscn },
 	{ "getehdr", l_elf_getehdr },
+	{ "class", l_elf_class },
+	{ "ident", l_elf_ident },
+	{ "type", l_elf_type },
+	{ "machine", l_elf_machine },
+	{ "version", l_elf_version },
+	{ "entry", l_elf_entry },
+	{ "phoff", l_elf_phoff },
+	{ "shoff", l_elf_shoff },
+	{ "flags", l_elf_flags },
+	{ "ehsize", l_elf_ehsize },
+	{ "phentsize", l_elf_phentsize },
+	{ "phnum", l_elf_phnum },
+	{ "shentsize", l_elf_shentsize },
+	{ "shnum", l_elf_shnum },
+	{ "shstrndx", l_elf_shstrndx },
 	{ NULL, NULL }
 };
 
@@ -366,10 +776,24 @@ static luaL_Reg elf_mt[] = {
 };
 
 static luaL_Reg elf_index[] = {
+	{ "close", l_elf_gc },
 	{ "nextscn", l_elf_nextscn },
 	{ "scn", l_elf_scn },
 	{ "getehdr", l_elf_getehdr },
-	{ "close", l_elf_gc },
+	{ "ident", l_elf_ident },
+	{ "type", l_elf_type },
+	{ "machine", l_elf_machine },
+	{ "version", l_elf_version },
+	{ "entry", l_elf_entry },
+	{ "phoff", l_elf_phoff },
+	{ "shoff", l_elf_shoff },
+	{ "flags", l_elf_flags },
+	{ "ehsize", l_elf_ehsize },
+	{ "phentsize", l_elf_phentsize },
+	{ "phnum", l_elf_phnum },
+	{ "shentsize", l_elf_shentsize },
+	{ "shnum", l_elf_shnum },
+	{ "shstrndx", l_elf_shstrndx },
 	{ NULL, NULL }
 };
 
