@@ -195,11 +195,23 @@ check_elf_scn_udata(lua_State *L, int arg)
 }
 
 static int
+push_err_returns(lua_State *L, int err, const char *errmsg)
+{
+
+	if (errmsg == NULL)
+		errmsg = elf_errmsg(err);
+
+	lua_pushnil(L);
+	lua_pushstring(L, errmsg);
+	lua_pushinteger(L, err); /* XXX Convert to a string. */
+	return 3;
+}
+
+static int
 l_elf_begin(lua_State *L)
 {
 	struct udataElf *ud;
-	const char *filename, *errmsg;
-	int err;
+	const char *filename;
 
 	filename = luaL_checkstring(L, 1);
 
@@ -213,24 +225,16 @@ l_elf_begin(lua_State *L)
 	lua_setmetatable(L, -2);
 
 	if ((ud->fd = open(filename, O_RDONLY | O_CLOEXEC)) == -1) {
-		err = errno;
-		errmsg = (const char *)strerror(err);
-		goto err;
+		int err = errno;
+
+		/* XXX This function is not for reporting C errors. */
+		return push_err_returns(L, err, (const char *)strerror(err));
 	}
 
-	if ((ud->elf = elf_begin(ud->fd, ELF_C_READ, NULL)) == NULL) {
-		err = elf_errno();
-		errmsg = elf_errmsg(err);
-		goto err;
-	}
+	if ((ud->elf = elf_begin(ud->fd, ELF_C_READ, NULL)) == NULL)
+		return push_err_returns(L, elf_errno(), NULL);
 
 	return 1;
-err:
-	lua_pushnil(L);
-	lua_pushstring(L, errmsg ? errmsg : "no error");
-	lua_pushinteger(L, err); /* XXX Is it C errno or Elf errno? */
-
-	return 3;
 }
 
 /*
@@ -268,12 +272,8 @@ init_ehdr_push(lua_State *L, struct udataElf *ud, int elf_arg)
 			ud->flags |= EHDR64;
 	}
 
-	if (ud->ehdr == NULL) {
-		lua_pushnil(L);
-		lua_pushstring(L, elf_errmsg(err));
-		lua_pushinteger(L, err);
-		return 3;
-	}
+	if (ud->ehdr == NULL)
+		return push_err_returns(L, err, NULL);
 
 	if (ud->flags & EHDR64) {
 		Elf64_Ehdr *h = ud->ehdr;
@@ -403,7 +403,6 @@ l_elf_class(lua_State *L)
 	assert(ud->ehdr != NULL);
 
 	lua_pushstring(L, (ud->flags & EHDR64) ? "ELFCLASS64" : "ELFCLASS32");
-
 	return 1;
 }
 
@@ -448,7 +447,6 @@ l_elf_type(lua_State *L)
 
 	lua_getuservalue(L, 1);
 	lua_getfield(L, -1, "type");
-
 	return 1;
 }
 
@@ -467,7 +465,6 @@ l_elf_machine(lua_State *L)
 
 	lua_getuservalue(L, 1);
 	lua_getfield(L, -1, "machine");
-
 	return 1;
 }
 
@@ -758,6 +755,55 @@ l_elf_shstrndx(lua_State *L)
 }
 
 static int
+l_elf_getshdrnum(lua_State *L)
+{
+	struct udataElf *ud;
+	size_t shnum;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (elf_getshdrnum(ud->elf, &shnum) != 0)
+		return push_err_returns(L, elf_errno(), NULL);
+
+	lua_pushinteger(L, shnum);
+	return 1;
+}
+
+static int
+l_elf_getphdrnum(lua_State *L)
+{
+	struct udataElf *ud;
+	size_t phnum;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (elf_getphdrnum(ud->elf, &phnum) != 0)
+		return push_err_returns(L, elf_errno(), NULL);
+
+	lua_pushinteger(L, phnum);
+	return 1;
+}
+
+static int
+l_elf_getshstrndx(lua_State *L)
+{
+	struct udataElf *ud;
+	size_t ndx;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	/*
+	 * Unlike elf_getshdrnum(3) and elf_getphdrnum(3),
+	 * elf_getshstrndx(3) returns 0 in case of an error.
+	 */
+	if (elf_getshstrndx(ud->elf, &ndx) == 0)
+		return push_err_returns(L, elf_errno(), NULL);
+
+	lua_pushinteger(L, ndx);
+	return 1;
+}
+
+static int
 l_elf_gc(lua_State *L)
 {
 	struct udataElf *ud;
@@ -785,7 +831,6 @@ l_elf_tostring(lua_State *L)
 	ud = check_elf_udata(L, 1, 1);
 
 	lua_pushfstring(L, "Elf%s@%p", ud->elf ? "" : "(closed)", ud);
-
 	return 1;
 }
 
@@ -852,7 +897,6 @@ l_elf_scn(lua_State *L)
 
 	lua_pushcfunction(L, &l_elf_nextscn);
 	lua_pushvalue(L, 1);
-
 	return 2;
 }
 
@@ -879,7 +923,6 @@ l_elf_scn_tostring(lua_State *L)
 	ud = test_elf_scn_udata(L, 1);
 
 	lua_pushfstring(L, "Elf_Scn%s@%p", *ud ? "" : "(inactive)", ud);
-
 	return 1;
 }
 
@@ -926,6 +969,9 @@ static const luaL_Reg elftoolchain[] = {
 	{ "shentsize", l_elf_shentsize },
 	{ "shnum", l_elf_shnum },
 	{ "shstrndx", l_elf_shstrndx },
+	{ "getshdrnum", l_elf_getshdrnum },
+	{ "getphdrnum", l_elf_getphdrnum },
+	{ "getshstrndx", l_elf_getshstrndx },
 	{ NULL, NULL }
 };
 
@@ -954,6 +1000,9 @@ static const luaL_Reg elf_index[] = {
 	{ "shentsize", l_elf_shentsize },
 	{ "shnum", l_elf_shnum },
 	{ "shstrndx", l_elf_shstrndx },
+	{ "getshdrnum", l_elf_getshdrnum },
+	{ "getphdrnum", l_elf_getphdrnum },
+	{ "getshstrndx", l_elf_getshstrndx },
 	{ NULL, NULL }
 };
 
