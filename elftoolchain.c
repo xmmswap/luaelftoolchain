@@ -821,7 +821,8 @@ luaopen_elftoolchain(lua_State *L)
 	luaL_setfuncs(L, elf_scn_mt, 0);
 	register_index(L, elf_scn_index);
 
-	luaL_newlib(L, elftoolchain);
+	luaL_newlibtable(L, elftoolchain);
+	luaL_setfuncs(L, elftoolchain, 0);
 
 	return 1;
 }
