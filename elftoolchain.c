@@ -23,8 +23,11 @@
 
 struct udataElf {
 	Elf *elf;
+	void *ehdr; /* Elf64_Ehdr or Elf32_Ehdr. */
 	void *mem; /* XXX implement */
 	int fd;
+	int flags;
+#define EHDR64 1
 };
 
 static int
@@ -75,7 +78,9 @@ l_elf_begin(lua_State *L)
 
 	ud = (struct udataElf *)lua_newuserdata(L, sizeof(struct udataElf));
 	ud->elf = NULL;
+	ud->ehdr = NULL;
 	ud->mem = NULL;
+	ud->flags = 0;
 
 	luaL_getmetatable(L, ELF_MT);
 	lua_setmetatable(L, -2);
@@ -99,6 +104,115 @@ err:
 	lua_pushinteger(L, err); /* XXX Is it C errno or Elf errno? */
 
 	return 3;
+}
+
+static int
+l_elf_getehdr(lua_State *L)
+{
+	struct udataElf *ud;
+	int err;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (ud->ehdr != NULL) {
+		/* Already cached in userdata. */
+		lua_getuservalue(L, 1);
+		return 1;
+	}
+
+	ud->ehdr = elf32_getehdr(ud->elf);
+	err = elf_errno();
+
+	if (ud->ehdr == NULL && err == ELF_E_CLASS) {
+		ud->ehdr = elf64_getehdr(ud->elf);
+		err = elf_errno();
+
+		if (ud->ehdr != NULL)
+			ud->flags |= EHDR64;
+	}
+
+	if (ud->ehdr == NULL) {
+		lua_pushnil(L);
+		lua_pushstring(L, elf_errmsg(err));
+		lua_pushinteger(L, err);
+		return 3;
+	}
+
+	lua_createtable(L, 0, 15);
+
+	if (ud->flags & EHDR64) {
+		Elf64_Ehdr *h = ud->ehdr;
+
+		lua_pushstring(L, "ELFCLASS64");
+		lua_setfield(L, -2, "class");
+		lua_pushlstring(L, (const char *)h->e_ident, ELF_NIDENT);
+		lua_setfield(L, -2, "ident");	/* Id bytes */
+		lua_pushinteger(L, h->e_type);
+		lua_setfield(L, -2, "type");	/* file type */
+		lua_pushinteger(L, h->e_machine);
+		lua_setfield(L, -2, "machine");	/* machine type */
+		lua_pushinteger(L, h->e_version);
+		lua_setfield(L, -2, "version");	/* version number */
+		lua_pushinteger(L, h->e_entry);
+		lua_setfield(L, -2, "entry");	/* entry point */
+		lua_pushinteger(L, h->e_phoff);
+		lua_setfield(L, -2, "phoff");	/* Program hdr offset */
+		lua_pushinteger(L, h->e_shoff);
+		lua_setfield(L, -2, "shoff");	/* Section hdr offset */
+		lua_pushinteger(L, h->e_flags);
+		lua_setfield(L, -2, "flags");	/* Processor flags */
+		lua_pushinteger(L, h->e_ehsize);
+		lua_setfield(L, -2, "ehsize");	/* sizeof ehdr */
+		lua_pushinteger(L, h->e_phentsize);
+		lua_setfield(L, -2, "phentsize");/* Program header entry size */
+		lua_pushinteger(L, h->e_phnum);
+		lua_setfield(L, -2, "phnum");	/* Number of program headers */
+		lua_pushinteger(L, h->e_shentsize);
+		lua_setfield(L, -2, "shentsize");/* Section header entry size */
+		lua_pushinteger(L, h->e_shnum);
+		lua_setfield(L, -2, "shnum");	/* Number of section headers */
+		lua_pushinteger(L, h->e_shstrndx);
+		lua_setfield(L, -2, "shstrndx");/* String table index */
+	} else {
+		Elf32_Ehdr *h = ud->ehdr;
+
+		lua_pushstring(L, "ELFCLASS32");
+		lua_setfield(L, -2, "class");
+		lua_pushlstring(L, (const char *)h->e_ident, ELF_NIDENT);
+		lua_setfield(L, -2, "ident");	/* Id bytes */
+		lua_pushinteger(L, h->e_type);
+		lua_setfield(L, -2, "type");	/* file type */
+		lua_pushinteger(L, h->e_machine);
+		lua_setfield(L, -2, "machine");	/* machine type */
+		lua_pushinteger(L, h->e_version);
+		lua_setfield(L, -2, "version");	/* version number */
+		lua_pushinteger(L, h->e_entry);
+		lua_setfield(L, -2, "entry");	/* entry point */
+		lua_pushinteger(L, h->e_phoff);
+		lua_setfield(L, -2, "phoff");	/* Program hdr offset */
+		lua_pushinteger(L, h->e_shoff);
+		lua_setfield(L, -2, "shoff");	/* Section hdr offset */
+		lua_pushinteger(L, h->e_flags);
+		lua_setfield(L, -2, "flags");	/* Processor flags */
+		lua_pushinteger(L, h->e_ehsize);
+		lua_setfield(L, -2, "ehsize");	/* sizeof ehdr */
+		lua_pushinteger(L, h->e_phentsize);
+		lua_setfield(L, -2, "phentsize");/* Program header entry size */
+		lua_pushinteger(L, h->e_phnum);
+		lua_setfield(L, -2, "phnum");	/* Number of program headers */
+		lua_pushinteger(L, h->e_shentsize);
+		lua_setfield(L, -2, "shentsize");/* Section header entry size */
+		lua_pushinteger(L, h->e_shnum);
+		lua_setfield(L, -2, "shnum");	/* Number of section headers */
+		lua_pushinteger(L, h->e_shstrndx);
+		lua_setfield(L, -2, "shstrndx");/* String table index */
+	}
+
+	/* Cache in userdata. */
+	lua_pushvalue(L, -1);
+	lua_setuservalue(L, 1);
+
+	return 1;
 }
 
 static int
@@ -241,6 +355,7 @@ static luaL_Reg elftoolchain[] = {
 	{ "begin", l_elf_begin },
 	{ "elf_end", l_elf_gc },
 	{ "nextscn", l_elf_nextscn },
+	{ "getehdr", l_elf_getehdr },
 	{ NULL, NULL }
 };
 
@@ -253,6 +368,7 @@ static luaL_Reg elf_mt[] = {
 static luaL_Reg elf_index[] = {
 	{ "nextscn", l_elf_nextscn },
 	{ "scn", l_elf_scn },
+	{ "getehdr", l_elf_getehdr },
 	{ "close", l_elf_gc },
 	{ NULL, NULL }
 };
