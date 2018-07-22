@@ -30,6 +30,133 @@ struct udataElf {
 #define EHDR64 1
 };
 
+struct KV {
+	lua_Integer key;
+	const char *val;
+};
+
+/* e_type values. */
+static const struct KV et_constants[] = {
+	{ ET_NONE, "NONE" },
+	{ ET_REL,  "REL"  },
+	{ ET_EXEC, "EXEC" },
+	{ ET_DYN,  "DYN"  },
+	{ ET_CORE, "CORE" },
+	{ 0, NULL }
+};
+
+/* e_machine values. */
+static const struct KV em_constants[] = {
+	{ EM_NONE, "NONE" },
+	{ EM_M32, "M32" },
+	{ EM_SPARC, "SPARC" },
+	{ EM_386, "386" },
+	{ EM_68K, "68K" },
+	{ EM_88K, "88K" },
+	{ EM_486, "486" },
+	{ EM_IAMCU, "IAMCU" },
+	{ EM_860, "860" },
+	{ EM_MIPS, "MIPS" },
+	{ EM_S370, "S370" },
+	{ EM_MIPS_RS3_LE, "MIPS_RS3_LE" },
+	{ EM_RS6000, "RS6000" },
+	{ EM_PARISC, "PARISC" },
+	{ EM_NCUBE, "NCUBE" },
+	{ EM_VPP500, "VPP500" },
+	{ EM_SPARC32PLUS, "SPARC32PLUS" },
+	{ EM_960, "960" },
+	{ EM_PPC, "PPC" },
+	{ EM_PPC64, "PPC64" },
+	{ EM_S390, "S390" },
+	{ EM_V800, "V800" },
+	{ EM_FR20, "FR20" },
+	{ EM_RH32, "RH32" },
+	{ EM_RCE, "RCE" },
+	{ EM_ARM, "ARM" },
+	{ EM_ALPHA, "ALPHA" },
+	{ EM_SH, "SH" },
+	{ EM_SPARCV9, "SPARCV9" },
+	{ EM_TRICORE, "TRICORE" },
+	{ EM_ARC, "ARC" },
+	{ EM_H8_300, "H8_300" },
+	{ EM_H8_300H, "H8_300H" },
+	{ EM_H8S, "H8S" },
+	{ EM_H8_500, "H8_500" },
+	{ EM_IA_64, "IA_64" },
+	{ EM_MIPS_X, "MIPS_X" },
+	{ EM_COLDFIRE, "COLDFIRE" },
+	{ EM_68HC12, "68HC12" },
+	{ EM_MMA, "MMA" },
+	{ EM_PCP, "PCP" },
+	{ EM_NCPU, "NCPU" },
+	{ EM_NDR1, "NDR1" },
+	{ EM_STARCORE, "STARCORE" },
+	{ EM_ME16, "ME16" },
+	{ EM_ST100, "ST100" },
+	{ EM_TINYJ, "TINYJ" },
+	{ EM_X86_64, "X86_64" },
+	{ EM_PDSP, "PDSP" },
+	{ EM_PDP10, "PDP10" },
+	{ EM_PDP11, "PDP11" },
+	{ EM_FX66, "FX66" },
+	{ EM_ST9PLUS, "ST9PLUS" },
+	{ EM_ST7, "ST7" },
+	{ EM_68HC16, "68HC16" },
+	{ EM_68HC11, "68HC11" },
+	{ EM_68HC08, "68HC08" },
+	{ EM_68HC05, "68HC05" },
+	{ EM_SVX, "SVX" },
+	{ EM_ST19, "ST19" },
+	{ EM_VAX, "VAX" },
+	{ EM_CRIS, "CRIS" },
+	{ EM_JAVELIN, "JAVELIN" },
+	{ EM_FIREPATH, "FIREPATH" },
+	{ EM_ZSP, "ZSP" },
+	{ EM_MMIX, "MMIX" },
+	{ EM_HUANY, "HUANY" },
+	{ EM_PRISM, "PRISM" },
+	{ EM_AVR, "AVR" },
+	{ EM_FR30, "FR30" },
+	{ EM_D10V, "D10V" },
+	{ EM_D30V, "D30V" },
+	{ EM_V850, "V850" },
+	{ EM_M32R, "M32R" },
+	{ EM_MN10300, "MN10300" },
+	{ EM_MN10200, "MN10200" },
+	{ EM_PJ, "PJ" },
+	{ EM_OR1K, "OR1K" },
+	{ EM_OPENRISC, "OPENRISC" },
+	{ EM_ARC_A5, "ARC_A5" },
+	{ EM_XTENSA, "XTENSA" },
+	{ EM_VIDEOCORE, "VIDEOCORE" },
+	{ EM_TMM_GPP, "TMM_GPP" },
+	{ EM_NS32K, "NS32K" },
+	{ EM_TPC, "TPC" },
+	{ EM_SNP1K, "SNP1K" },
+	{ EM_ST200, "ST200" },
+	{ EM_IP2K, "IP2K" },
+	{ EM_MAX, "MAX" },
+	{ EM_CR, "CR" },
+	{ EM_F2MC16, "F2MC16" },
+	{ EM_MSP430, "MSP430" },
+	{ EM_BLACKFIN, "BLACKFIN" },
+	{ EM_SE_C33, "SE_C33" },
+	{ EM_SEP, "SEP" },
+	{ EM_ARCA, "ARCA" },
+	{ EM_UNICORE, "UNICORE" },
+	{ EM_ALTERA_NIOS2, "ALTERA_NIOS2" },
+	{ EM_AARCH64, "AARCH64" },
+	{ EM_AVR32, "AVR32" },
+	{ EM_TILE64, "TILE64" },
+	{ EM_TILEPRO, "TILEPRO" },
+	{ EM_MICROBLAZE, "MICROBLAZE" },
+	{ EM_TILEGX, "TILEGX" },
+	{ EM_Z80, "Z80" },
+	{ EM_RISCV, "RISCV" },
+	{ EM_ALPHA_EXP, "ALPHA_EXP" },
+	{ 0, NULL }
+};
+
 static int
 elf_is_closed(lua_State *L, int arg)
 {
@@ -108,11 +235,24 @@ err:
 
 /*
  * XXX Extract EI_CLASS EI_DATA EI_VERSION EI_OSABI EI_ABIVERSION from e_ident.
- * XXX Convert e_type and e_machine to strings.
  */
 static int
 init_ehdr_push(lua_State *L, struct udataElf *ud, int elf_arg)
 {
+	const char *ident, *class;
+	lua_Integer type;	/* file type */
+	lua_Integer machine;	/* machine type */
+	lua_Integer version;	/* version number */
+	lua_Integer entry;	/* entry point */
+	lua_Integer phoff;	/* Program hdr offset */
+	lua_Integer shoff;	/* Section hdr offset */
+	lua_Integer flags;	/* Processor flags */
+	lua_Integer ehsize;	/* sizeof ehdr */
+	lua_Integer phentsize;	/* Program header entry size */
+	lua_Integer phnum;	/* Number of program headers */
+	lua_Integer shentsize;	/* Section header entry size */
+	lua_Integer shnum;	/* Number of section headers */
+	lua_Integer shstrndx;	/* String table index */
 	int err;
 
 	assert(ud->ehdr == NULL);
@@ -135,75 +275,96 @@ init_ehdr_push(lua_State *L, struct udataElf *ud, int elf_arg)
 		return 3;
 	}
 
-	lua_createtable(L, 0, 15);
-
 	if (ud->flags & EHDR64) {
 		Elf64_Ehdr *h = ud->ehdr;
 
-		lua_pushstring(L, "ELFCLASS64");
-		lua_setfield(L, -2, "class");
-		lua_pushlstring(L, (const char *)h->e_ident, ELF_NIDENT);
-		lua_setfield(L, -2, "ident");	/* Id bytes */
-		lua_pushinteger(L, h->e_type);
-		lua_setfield(L, -2, "type");	/* file type */
-		lua_pushinteger(L, h->e_machine);
-		lua_setfield(L, -2, "machine");	/* machine type */
-		lua_pushinteger(L, h->e_version);
-		lua_setfield(L, -2, "version");	/* version number */
-		lua_pushinteger(L, h->e_entry);
-		lua_setfield(L, -2, "entry");	/* entry point */
-		lua_pushinteger(L, h->e_phoff);
-		lua_setfield(L, -2, "phoff");	/* Program hdr offset */
-		lua_pushinteger(L, h->e_shoff);
-		lua_setfield(L, -2, "shoff");	/* Section hdr offset */
-		lua_pushinteger(L, h->e_flags);
-		lua_setfield(L, -2, "flags");	/* Processor flags */
-		lua_pushinteger(L, h->e_ehsize);
-		lua_setfield(L, -2, "ehsize");	/* sizeof ehdr */
-		lua_pushinteger(L, h->e_phentsize);
-		lua_setfield(L, -2, "phentsize");/* Program header entry size */
-		lua_pushinteger(L, h->e_phnum);
-		lua_setfield(L, -2, "phnum");	/* Number of program headers */
-		lua_pushinteger(L, h->e_shentsize);
-		lua_setfield(L, -2, "shentsize");/* Section header entry size */
-		lua_pushinteger(L, h->e_shnum);
-		lua_setfield(L, -2, "shnum");	/* Number of section headers */
-		lua_pushinteger(L, h->e_shstrndx);
-		lua_setfield(L, -2, "shstrndx");/* String table index */
+		class = "ELFCLASS64";
+		ident = (const char *)h->e_ident;
+		type = h->e_type;
+		machine = h->e_machine;
+		version = h->e_version;
+		entry = h->e_entry;
+		phoff = h->e_phoff;
+		shoff = h->e_shoff;
+		flags = h->e_flags;
+		ehsize = h->e_ehsize;
+		phentsize = h->e_phentsize;
+		phnum = h->e_phnum;
+		shentsize = h->e_shentsize;
+		shnum = h->e_shnum;
+		shstrndx = h->e_shstrndx;
 	} else {
 		Elf32_Ehdr *h = ud->ehdr;
 
-		lua_pushstring(L, "ELFCLASS32");
-		lua_setfield(L, -2, "class");
-		lua_pushlstring(L, (const char *)h->e_ident, ELF_NIDENT);
-		lua_setfield(L, -2, "ident");	/* Id bytes */
-		lua_pushinteger(L, h->e_type);
-		lua_setfield(L, -2, "type");	/* file type */
-		lua_pushinteger(L, h->e_machine);
-		lua_setfield(L, -2, "machine");	/* machine type */
-		lua_pushinteger(L, h->e_version);
-		lua_setfield(L, -2, "version");	/* version number */
-		lua_pushinteger(L, h->e_entry);
-		lua_setfield(L, -2, "entry");	/* entry point */
-		lua_pushinteger(L, h->e_phoff);
-		lua_setfield(L, -2, "phoff");	/* Program hdr offset */
-		lua_pushinteger(L, h->e_shoff);
-		lua_setfield(L, -2, "shoff");	/* Section hdr offset */
-		lua_pushinteger(L, h->e_flags);
-		lua_setfield(L, -2, "flags");	/* Processor flags */
-		lua_pushinteger(L, h->e_ehsize);
-		lua_setfield(L, -2, "ehsize");	/* sizeof ehdr */
-		lua_pushinteger(L, h->e_phentsize);
-		lua_setfield(L, -2, "phentsize");/* Program header entry size */
-		lua_pushinteger(L, h->e_phnum);
-		lua_setfield(L, -2, "phnum");	/* Number of program headers */
-		lua_pushinteger(L, h->e_shentsize);
-		lua_setfield(L, -2, "shentsize");/* Section header entry size */
-		lua_pushinteger(L, h->e_shnum);
-		lua_setfield(L, -2, "shnum");	/* Number of section headers */
-		lua_pushinteger(L, h->e_shstrndx);
-		lua_setfield(L, -2, "shstrndx");/* String table index */
+		class = "ELFCLASS32";
+		ident = (const char *)h->e_ident;
+		type = h->e_type;
+		machine = h->e_machine;
+		version = h->e_version;
+		entry = h->e_entry;
+		phoff = h->e_phoff;
+		shoff = h->e_shoff;
+		flags = h->e_flags;
+		ehsize = h->e_ehsize;
+		phentsize = h->e_phentsize;
+		phnum = h->e_phnum;
+		shentsize = h->e_shentsize;
+		shnum = h->e_shnum;
+		shstrndx = h->e_shstrndx;
 	}
+
+	lua_createtable(L, 0, 15);
+
+	lua_pushstring(L, class);
+	lua_setfield(L, -2, "class");
+	lua_pushlstring(L, ident, ELF_NIDENT);
+	lua_setfield(L, -2, "ident");
+	lua_pushinteger(L, version);
+	lua_setfield(L, -2, "version");
+	lua_pushinteger(L, entry);
+	lua_setfield(L, -2, "entry");
+	lua_pushinteger(L, phoff);
+	lua_setfield(L, -2, "phoff");
+	lua_pushinteger(L, shoff);
+	lua_setfield(L, -2, "shoff");
+	lua_pushinteger(L, flags);
+	lua_setfield(L, -2, "flags");
+	lua_pushinteger(L, ehsize);
+	lua_setfield(L, -2, "ehsize");
+	lua_pushinteger(L, phentsize);
+	lua_setfield(L, -2, "phentsize");
+	lua_pushinteger(L, phnum);
+	lua_setfield(L, -2, "phnum");
+	lua_pushinteger(L, shentsize);
+	lua_setfield(L, -2, "shentsize");
+	lua_pushinteger(L, shnum);
+	lua_setfield(L, -2, "shnum");
+	lua_pushinteger(L, shstrndx);
+	lua_setfield(L, -2, "shstrndx");
+
+	/* Push e_type. */
+	lua_rawgetp(L, LUA_REGISTRYINDEX, et_constants);
+	lua_rawgeti(L, -1, type);
+
+	if (lua_isnil(L, -1)) {
+		lua_pushinteger(L, type);
+		lua_replace(L, -2);
+	}
+
+	lua_setfield(L, -3, "type");
+	lua_pop(L, 1);
+
+	/* Push e_machine. */
+	lua_rawgetp(L, LUA_REGISTRYINDEX, em_constants);
+	lua_rawgeti(L, -1, machine);
+
+	if (lua_isnil(L, -1)) {
+		lua_pushinteger(L, machine);
+		lua_replace(L, -2);
+	}
+
+	lua_setfield(L, -3, "machine");	/* machine type */
+	lua_pop(L, 1);
 
 	/* Cache in userdata. */
 	lua_pushvalue(L, -1);
@@ -285,15 +446,8 @@ l_elf_type(lua_State *L)
 
 	assert(ud->ehdr != NULL);
 
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_type);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_type);
-	}
+	lua_getuservalue(L, 1);
+	lua_getfield(L, -1, "type");
 
 	return 1;
 }
@@ -311,15 +465,8 @@ l_elf_machine(lua_State *L)
 
 	assert(ud->ehdr != NULL);
 
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_machine);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_machine);
-	}
+	lua_getuservalue(L, 1);
+	lua_getfield(L, -1, "machine");
 
 	return 1;
 }
@@ -737,7 +884,7 @@ l_elf_scn_tostring(lua_State *L)
 }
 
 static void
-register_index(lua_State *L, luaL_Reg index[])
+register_index(lua_State *L, const luaL_Reg index[])
 {
 
 	lua_pushstring(L, "__index");
@@ -746,7 +893,20 @@ register_index(lua_State *L, luaL_Reg index[])
 	lua_rawset(L, -3);
 }
 
-static luaL_Reg elftoolchain[] = {
+static void
+push_constants(lua_State *L, const struct KV kv[])
+{
+	size_t i;
+
+	lua_createtable(L, 0, 0);
+
+	for (i = 0; kv[i].val != NULL; i++) {
+		lua_pushstring(L, kv[i].val);
+		lua_rawseti(L, -2, kv[i].key);
+	}
+}
+
+static const luaL_Reg elftoolchain[] = {
 	{ "begin", l_elf_begin },
 	{ "elf_end", l_elf_gc },
 	{ "nextscn", l_elf_nextscn },
@@ -769,13 +929,13 @@ static luaL_Reg elftoolchain[] = {
 	{ NULL, NULL }
 };
 
-static luaL_Reg elf_mt[] = {
+static const luaL_Reg elf_mt[] = {
 	{ "__gc", l_elf_gc },
 	{ "__tostring", l_elf_tostring },
 	{ NULL, NULL }
 };
 
-static luaL_Reg elf_index[] = {
+static const luaL_Reg elf_index[] = {
 	{ "close", l_elf_gc },
 	{ "nextscn", l_elf_nextscn },
 	{ "scn", l_elf_scn },
@@ -797,12 +957,12 @@ static luaL_Reg elf_index[] = {
 	{ NULL, NULL }
 };
 
-static luaL_Reg elf_scn_mt[] = {
+static const luaL_Reg elf_scn_mt[] = {
 	{ "__tostring", l_elf_scn_tostring },
 	{ NULL, NULL }
 };
 
-static luaL_Reg elf_scn_index[] = {
+static const luaL_Reg elf_scn_index[] = {
 	{ "next", l_elf_scn_next },
 	{ NULL, NULL }
 };
@@ -812,6 +972,12 @@ luaopen_elftoolchain(lua_State *L)
 {
 	if (elf_version(EV_CURRENT) == EV_NONE)
 		return luaL_error(L, "ELF library is too old");
+
+	push_constants(L, et_constants);
+	lua_rawsetp(L, LUA_REGISTRYINDEX, &et_constants);
+
+	push_constants(L, em_constants);
+	lua_rawsetp(L, LUA_REGISTRYINDEX, &em_constants);
 
 	luaL_newmetatable(L, ELF_MT);
 	luaL_setfuncs(L, elf_mt, 0);
