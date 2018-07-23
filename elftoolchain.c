@@ -157,6 +157,27 @@ static const struct KV em_constants[] = {
 	{ 0, NULL }
 };
 
+/* sh_type values. */
+static const struct KV sht_constants[] = {
+	{ SHT_NULL, "NULL" },
+	{ SHT_PROGBITS, "PROGBITS" },
+	{ SHT_SYMTAB, "SYMTAB" },
+	{ SHT_STRTAB, "STRTAB" },
+	{ SHT_RELA, "RELA" },
+	{ SHT_HASH, "HASH" },
+	{ SHT_DYNAMIC, "DYNAMIC" },
+	{ SHT_NOTE, "NOTE" },
+	{ SHT_NOBITS, "NOBITS" },
+	{ SHT_REL, "REL" },
+	{ SHT_SHLIB, "SHLIB" },
+	{ SHT_DYNSYM, "DYNSYM" },
+	{ SHT_INIT_ARRAY, "INIT_ARRAY" },
+	{ SHT_FINI_ARRAY, "FINI_ARRAY" },
+	{ SHT_PREINIT_ARRAY, "PREINIT_ARRAY" },
+	{ SHT_GROUP, "GROUP" },
+	{ SHT_SYMTAB_SHNDX, "SYMTAB_SHNDX" },
+};
+
 static int
 elf_is_closed(lua_State *L, int arg)
 {
@@ -916,6 +937,97 @@ l_elf_scn_next(lua_State *L)
 }
 
 static int
+l_elf_scn_getshdr(lua_State *L)
+{
+	Elf_Scn **ud;
+	Elf32_Shdr *h32 = NULL;
+	Elf64_Shdr *h64 = NULL;
+	lua_Integer name;	/* section name (.shstrtab index) */
+	lua_Integer type;	/* section type */
+	lua_Integer flags;	/* section flags */
+	lua_Integer addr;	/* virtual address */
+	lua_Integer offset;	/* file offset */
+	lua_Integer size;	/* section size */
+	lua_Integer link;	/* link to another */
+	lua_Integer info;	/* misc info */
+	lua_Integer addralign;	/* memory alignment */
+	lua_Integer entsize;	/* table entry size */
+	int err;
+
+	ud = check_elf_scn_udata(L, 1);
+
+	h32 = elf32_getshdr(*ud);
+	err = elf_errno();
+
+	if (h32 == NULL && err == ELF_E_CLASS) {
+		h64 = elf64_getshdr(*ud);
+		err = elf_errno();
+	}
+
+	if (h32 == NULL && h64 == NULL)
+		return push_err_returns(L, err, NULL);
+
+	if (h32 != NULL) {
+		name = h32->sh_name;
+		type = h32->sh_type;
+		flags = h32->sh_flags;
+		addr = h32->sh_addr;
+		offset = h32->sh_offset;
+		size = h32->sh_size;
+		link = h32->sh_link;
+		info = h32->sh_info;
+		addralign = h32->sh_addralign;
+		entsize = h32->sh_entsize;
+	} else {
+		name = h64->sh_name;
+		type = h64->sh_type;
+		flags = h64->sh_flags;
+		addr = h64->sh_addr;
+		offset = h64->sh_offset;
+		size = h64->sh_size;
+		link = h64->sh_link;
+		info = h64->sh_info;
+		addralign = h64->sh_addralign;
+		entsize = h64->sh_entsize;
+	}
+
+	lua_createtable(L, 0, 0);
+
+	lua_pushinteger(L, name);
+	lua_setfield(L, -2, "name");
+	lua_pushinteger(L, flags);
+	lua_setfield(L, -2, "flags");
+	lua_pushinteger(L, addr);
+	lua_setfield(L, -2, "addr");
+	lua_pushinteger(L, offset);
+	lua_setfield(L, -2, "offset");
+	lua_pushinteger(L, size);
+	lua_setfield(L, -2, "size");
+	lua_pushinteger(L, link);
+	lua_setfield(L, -2, "link");
+	lua_pushinteger(L, info);
+	lua_setfield(L, -2, "info");
+	lua_pushinteger(L, addralign);
+	lua_setfield(L, -2, "addralign");
+	lua_pushinteger(L, entsize);
+	lua_setfield(L, -2, "entsize");
+
+	/* Push sh_type. */
+	lua_rawgetp(L, LUA_REGISTRYINDEX, sht_constants);
+	lua_rawgeti(L, -1, type);
+
+	if (lua_isnil(L, -1)) {
+		lua_pushinteger(L, type);
+		lua_replace(L, -2);
+	}
+
+	lua_setfield(L, -3, "type");
+	lua_pop(L, 1);
+
+	return 1;
+}
+
+static int
 l_elf_scn_tostring(lua_State *L)
 {
 	Elf_Scn **ud;
@@ -972,6 +1084,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getshdrnum", l_elf_getshdrnum },
 	{ "getphdrnum", l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
+	{ "getshdr", l_elf_scn_getshdr },
 	{ NULL, NULL }
 };
 
@@ -1013,6 +1126,7 @@ static const luaL_Reg elf_scn_mt[] = {
 
 static const luaL_Reg elf_scn_index[] = {
 	{ "next", l_elf_scn_next },
+	{ "getshdr", l_elf_scn_getshdr },
 	{ NULL, NULL }
 };
 
@@ -1027,6 +1141,9 @@ luaopen_elftoolchain(lua_State *L)
 
 	push_constants(L, em_constants);
 	lua_rawsetp(L, LUA_REGISTRYINDEX, &em_constants);
+
+	push_constants(L, sht_constants);
+	lua_rawsetp(L, LUA_REGISTRYINDEX, &sht_constants);
 
 	luaL_newmetatable(L, ELF_MT);
 	luaL_setfuncs(L, elf_mt, 0);
