@@ -216,7 +216,7 @@ check_elf_scn_udata(lua_State *L, int arg)
 }
 
 static int
-push_err_returns(lua_State *L, int err, const char *errmsg)
+push_err_results(lua_State *L, int err, const char *errmsg)
 {
 
 	if (errmsg == NULL)
@@ -249,11 +249,11 @@ l_elf_begin(lua_State *L)
 		int err = errno;
 
 		/* XXX This function is not for reporting C errors. */
-		return push_err_returns(L, err, (const char *)strerror(err));
+		return push_err_results(L, err, (const char *)strerror(err));
 	}
 
 	if ((ud->elf = elf_begin(ud->fd, ELF_C_READ, NULL)) == NULL)
-		return push_err_returns(L, elf_errno(), NULL);
+		return push_err_results(L, elf_errno(), NULL);
 
 	return 1;
 }
@@ -294,7 +294,7 @@ init_ehdr_push(lua_State *L, struct udataElf *ud, int elf_arg)
 	}
 
 	if (ud->ehdr == NULL)
-		return push_err_returns(L, err, NULL);
+		return push_err_results(L, err, NULL);
 
 	if (ud->flags & EHDR64) {
 		Elf64_Ehdr *h = ud->ehdr;
@@ -784,7 +784,7 @@ l_elf_getshdrnum(lua_State *L)
 	ud = check_elf_udata(L, 1, 1);
 
 	if (elf_getshdrnum(ud->elf, &shnum) != 0)
-		return push_err_returns(L, elf_errno(), NULL);
+		return push_err_results(L, elf_errno(), NULL);
 
 	lua_pushinteger(L, shnum);
 	return 1;
@@ -799,7 +799,7 @@ l_elf_getphdrnum(lua_State *L)
 	ud = check_elf_udata(L, 1, 1);
 
 	if (elf_getphdrnum(ud->elf, &phnum) != 0)
-		return push_err_returns(L, elf_errno(), NULL);
+		return push_err_results(L, elf_errno(), NULL);
 
 	lua_pushinteger(L, phnum);
 	return 1;
@@ -818,7 +818,7 @@ l_elf_getshstrndx(lua_State *L)
 	 * elf_getshstrndx(3) returns 0 in case of an error.
 	 */
 	if (elf_getshstrndx(ud->elf, &ndx) == 0)
-		return push_err_returns(L, elf_errno(), NULL);
+		return push_err_results(L, elf_errno(), NULL);
 
 	lua_pushinteger(L, ndx);
 	return 1;
@@ -965,7 +965,7 @@ l_elf_scn_getshdr(lua_State *L)
 	}
 
 	if (h32 == NULL && h64 == NULL)
-		return push_err_returns(L, err, NULL);
+		return push_err_results(L, err, NULL);
 
 	if (h32 != NULL) {
 		name = h32->sh_name;
