@@ -948,6 +948,34 @@ l_elf_scn_next(lua_State *L)
 }
 
 static int
+check_elf_scn_udata_load_shdr(lua_State *L, int arg, struct udataElfScn **p)
+{
+	struct udataElfScn *ud;
+	int err;
+
+	ud = check_elf_scn_udata(L, arg);
+	*p = ud;
+
+	if (ud->shdr == NULL)
+		ud->shdr = elf32_getshdr(ud->scn);
+
+	if (ud->shdr != NULL)
+		return ELF_E_NONE;
+
+	err = elf_errno();
+	if (err != ELF_E_CLASS)
+		return err;
+
+	ud->shdr = elf64_getshdr(ud->scn);
+	if (ud->shdr == NULL)
+		return elf_errno();
+
+	ud->flags |= SHDR64;
+
+	return ELF_E_NONE;
+}
+
+static int
 l_elf_scn_getshdr(lua_State *L)
 {
 	struct udataElfScn *ud;
@@ -963,19 +991,7 @@ l_elf_scn_getshdr(lua_State *L)
 	lua_Integer entsize;	/* table entry size */
 	int err;
 
-	ud = check_elf_scn_udata(L, 1);
-
-	if (ud->shdr == NULL) {
-		ud->shdr = elf32_getshdr(ud->scn);
-		err = elf_errno();
-
-		if (ud->shdr == NULL && err == ELF_E_CLASS) {
-			ud->shdr = elf64_getshdr(ud->scn);
-			err = elf_errno();
-		}
-	}
-
-	if (ud->shdr == NULL)
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
 		return push_err_results(L, err, NULL);
 
 	if (ud->flags & SHDR64) {
@@ -1039,6 +1055,252 @@ l_elf_scn_getshdr(lua_State *L)
 	lua_setfield(L, -3, "type");
 	lua_pop(L, 1);
 
+	return 1;
+}
+
+static int
+l_elf_scn_name(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer name;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		name = h->sh_name;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		name = h->sh_name;
+	}
+
+	lua_pushinteger(L, name);
+	return 1;
+}
+
+static int
+l_elf_scn_type(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer type;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		type = h->sh_type;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		type = h->sh_type;
+	}
+
+	/* Push sh_type. */
+	lua_rawgetp(L, LUA_REGISTRYINDEX, sht_constants);
+	lua_rawgeti(L, -1, type);
+
+	if (lua_isnil(L, -1))
+		lua_pushinteger(L, type);
+
+	return 1;
+}
+
+static int
+l_elf_scn_flags(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer flags;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		flags = h->sh_flags;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		flags = h->sh_flags;
+	}
+
+	lua_pushinteger(L, flags);
+	return 1;
+}
+
+static int
+l_elf_scn_addr(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer addr;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		addr = h->sh_addr;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		addr = h->sh_addr;
+	}
+
+	lua_pushinteger(L, addr);
+	return 1;
+}
+
+static int
+l_elf_scn_offset(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer offset;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		offset = h->sh_offset;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		offset = h->sh_offset;
+	}
+
+	lua_pushinteger(L, offset);
+	return 1;
+}
+
+static int
+l_elf_scn_size(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer size;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		size = h->sh_size;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		size = h->sh_size;
+	}
+
+	lua_pushinteger(L, size);
+	return 1;
+}
+
+static int
+l_elf_scn_link(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer link;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		link = h->sh_link;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		link = h->sh_link;
+	}
+
+	lua_pushinteger(L, link);
+	return 1;
+}
+
+static int
+l_elf_scn_info(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer info;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		info = h->sh_info;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		info = h->sh_info;
+	}
+
+	lua_pushinteger(L, info);
+	return 1;
+}
+
+static int
+l_elf_scn_addralign(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer addralign;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		addralign = h->sh_addralign;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		addralign = h->sh_addralign;
+	}
+
+	lua_pushinteger(L, addralign);
+	return 1;
+}
+
+static int
+l_elf_scn_entsize(lua_State *L)
+{
+	struct udataElfScn *ud;
+	lua_Integer entsize;
+	int err;
+
+	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
+		return push_err_results(L, err, NULL);
+
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		entsize = h->sh_entsize;
+	} else {
+		Elf32_Shdr *h = ud->shdr;
+
+		entsize = h->sh_entsize;
+	}
+
+	lua_pushinteger(L, entsize);
 	return 1;
 }
 
@@ -1143,6 +1405,16 @@ static const luaL_Reg elf_scn_mt[] = {
 static const luaL_Reg elf_scn_index[] = {
 	{ "next", l_elf_scn_next },
 	{ "getshdr", l_elf_scn_getshdr },
+	{ "name", l_elf_scn_name },
+	{ "type", l_elf_scn_type },
+	{ "flags", l_elf_scn_flags },
+	{ "addr", l_elf_scn_addr },
+	{ "offset", l_elf_scn_offset },
+	{ "size", l_elf_scn_size },
+	{ "link", l_elf_scn_link },
+	{ "info", l_elf_scn_info },
+	{ "addralign", l_elf_scn_addralign },
+	{ "entsize", l_elf_scn_entsize },
 	{ NULL, NULL }
 };
 
