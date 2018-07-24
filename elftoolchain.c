@@ -240,7 +240,7 @@ l_elf_begin(lua_State *L)
 
 	filename = luaL_checkstring(L, 1);
 
-	ud = (struct udataElf *)lua_newuserdata(L, sizeof(struct udataElf));
+	ud = (struct udataElf *)lua_newuserdata(L, sizeof(*ud));
 	ud->elf = NULL;
 	ud->ehdr = NULL;
 	ud->mem = NULL;
