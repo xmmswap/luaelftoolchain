@@ -23,7 +23,7 @@
 
 struct udataElf {
 	Elf *elf;
-	void *ehdr; /* Elf64_Ehdr or Elf32_Ehdr. */
+	void *ehdr; /* Cached Elf64_Ehdr or Elf32_Ehdr object. */
 	void *mem; /* XXX implement */
 	int fd;
 	int flags;
@@ -32,6 +32,9 @@ struct udataElf {
 
 struct udataElfScn {
 	Elf_Scn *scn;
+	void *shdr; /* Cached Elf32_Shdr or Elf64_Shdr object. */
+	int flags;
+#define SHDR64 1
 };
 
 struct KV {
@@ -878,6 +881,8 @@ nextscn_push(lua_State *L, Elf *elf, Elf_Scn *scn, int elf_arg)
 
 	ud = (struct udataElfScn *)lua_newuserdata(L, sizeof(*ud));
 	ud->scn = NULL;
+	ud->shdr = NULL;
+	ud->flags = 0;
 
 	luaL_getmetatable(L, ELF_SCN_MT);
 	lua_setmetatable(L, -2);
@@ -946,8 +951,6 @@ static int
 l_elf_scn_getshdr(lua_State *L)
 {
 	struct udataElfScn *ud;
-	Elf32_Shdr *h32 = NULL;
-	Elf64_Shdr *h64 = NULL;
 	lua_Integer name;	/* section name (.shstrtab index) */
 	lua_Integer type;	/* section type */
 	lua_Integer flags;	/* section flags */
@@ -962,39 +965,45 @@ l_elf_scn_getshdr(lua_State *L)
 
 	ud = check_elf_scn_udata(L, 1);
 
-	h32 = elf32_getshdr(ud->scn);
-	err = elf_errno();
-
-	if (h32 == NULL && err == ELF_E_CLASS) {
-		h64 = elf64_getshdr(ud->scn);
+	if (ud->shdr == NULL) {
+		ud->shdr = elf32_getshdr(ud->scn);
 		err = elf_errno();
+
+		if (ud->shdr == NULL && err == ELF_E_CLASS) {
+			ud->shdr = elf64_getshdr(ud->scn);
+			err = elf_errno();
+		}
 	}
 
-	if (h32 == NULL && h64 == NULL)
+	if (ud->shdr == NULL)
 		return push_err_results(L, err, NULL);
 
-	if (h32 != NULL) {
-		name = h32->sh_name;
-		type = h32->sh_type;
-		flags = h32->sh_flags;
-		addr = h32->sh_addr;
-		offset = h32->sh_offset;
-		size = h32->sh_size;
-		link = h32->sh_link;
-		info = h32->sh_info;
-		addralign = h32->sh_addralign;
-		entsize = h32->sh_entsize;
+	if (ud->flags & SHDR64) {
+		Elf64_Shdr *h = ud->shdr;
+
+		name = h->sh_name;
+		type = h->sh_type;
+		flags = h->sh_flags;
+		addr = h->sh_addr;
+		offset = h->sh_offset;
+		size = h->sh_size;
+		link = h->sh_link;
+		info = h->sh_info;
+		addralign = h->sh_addralign;
+		entsize = h->sh_entsize;
 	} else {
-		name = h64->sh_name;
-		type = h64->sh_type;
-		flags = h64->sh_flags;
-		addr = h64->sh_addr;
-		offset = h64->sh_offset;
-		size = h64->sh_size;
-		link = h64->sh_link;
-		info = h64->sh_info;
-		addralign = h64->sh_addralign;
-		entsize = h64->sh_entsize;
+		Elf32_Shdr *h = ud->shdr;
+
+		name = h->sh_name;
+		type = h->sh_type;
+		flags = h->sh_flags;
+		addr = h->sh_addr;
+		offset = h->sh_offset;
+		size = h->sh_size;
+		link = h->sh_link;
+		info = h->sh_info;
+		addralign = h->sh_addralign;
+		entsize = h->sh_entsize;
 	}
 
 	lua_createtable(L, 0, 0);
