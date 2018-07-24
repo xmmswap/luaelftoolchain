@@ -30,6 +30,10 @@ struct udataElf {
 #define EHDR64 1
 };
 
+struct udataElfScn {
+	Elf_Scn *scn;
+};
+
 struct KV {
 	lua_Integer key;
 	const char *val;
@@ -201,18 +205,18 @@ check_elf_udata(lua_State *L, int arg, int err_arg)
 	return ud;
 }
 
-static Elf_Scn **
+static struct udataElfScn *
 test_elf_scn_udata(lua_State *L, int arg)
 {
 
-	return (Elf_Scn **)luaL_testudata(L, arg, ELF_SCN_MT);
+	return (struct udataElfScn *)luaL_testudata(L, arg, ELF_SCN_MT);
 }
 
-static Elf_Scn **
+static struct udataElfScn *
 check_elf_scn_udata(lua_State *L, int arg)
 {
 
-	return (Elf_Scn **)luaL_checkudata(L, arg, ELF_SCN_MT);
+	return (struct udataElfScn *)luaL_checkudata(L, arg, ELF_SCN_MT);
 }
 
 static int
@@ -862,7 +866,7 @@ l_elf_tostring(lua_State *L)
 static int
 nextscn_push(lua_State *L, Elf *elf, Elf_Scn *scn, int elf_arg)
 {
-	Elf_Scn **ud;
+	struct udataElfScn *ud;
 
 	/* XXX Documentation isn't clear about how to detect an error. */
 	scn = elf_nextscn(elf, scn);
@@ -872,8 +876,8 @@ nextscn_push(lua_State *L, Elf *elf, Elf_Scn *scn, int elf_arg)
 		return 1;
 	}
 
-	ud = (Elf_Scn **)lua_newuserdata(L, sizeof(Elf_Scn *));
-	*ud = NULL;
+	ud = (struct udataElfScn *)lua_newuserdata(L, sizeof(*ud));
+	ud->scn = NULL;
 
 	luaL_getmetatable(L, ELF_SCN_MT);
 	lua_setmetatable(L, -2);
@@ -883,7 +887,7 @@ nextscn_push(lua_State *L, Elf *elf, Elf_Scn *scn, int elf_arg)
 	lua_pushvalue(L, elf_arg);
 	lua_setuservalue(L, -2);
 
-	*ud = scn;
+	ud->scn = scn;
 
 	return 1;
 }
@@ -892,11 +896,12 @@ static int
 l_elf_nextscn(lua_State *L)
 {
 	struct udataElf *elf;
-	Elf_Scn *scn, **ud;
+	struct udataElfScn *ud;
+	Elf_Scn *scn;
 
 	elf = check_elf_udata(L, 1, 1);
 	ud = test_elf_scn_udata(L, 2);
-	scn = ud ? *ud : NULL;
+	scn = ud ? ud->scn : NULL;
 
 	if (ud != NULL) {
 		lua_getuservalue(L, 2);
@@ -924,11 +929,12 @@ l_elf_scn(lua_State *L)
 static int
 l_elf_scn_next(lua_State *L)
 {
-	Elf_Scn *scn, **ud;
+	Elf_Scn *scn;
 	struct udataElf *elf;
+	struct udataElfScn *ud;
 
 	ud = check_elf_scn_udata(L, 1);
-	scn = *ud;
+	scn = ud->scn;
 
 	lua_getuservalue(L, 1);
 	elf = check_elf_udata(L, -1, 1);
@@ -939,7 +945,7 @@ l_elf_scn_next(lua_State *L)
 static int
 l_elf_scn_getshdr(lua_State *L)
 {
-	Elf_Scn **ud;
+	struct udataElfScn *ud;
 	Elf32_Shdr *h32 = NULL;
 	Elf64_Shdr *h64 = NULL;
 	lua_Integer name;	/* section name (.shstrtab index) */
@@ -956,11 +962,11 @@ l_elf_scn_getshdr(lua_State *L)
 
 	ud = check_elf_scn_udata(L, 1);
 
-	h32 = elf32_getshdr(*ud);
+	h32 = elf32_getshdr(ud->scn);
 	err = elf_errno();
 
 	if (h32 == NULL && err == ELF_E_CLASS) {
-		h64 = elf64_getshdr(*ud);
+		h64 = elf64_getshdr(ud->scn);
 		err = elf_errno();
 	}
 
@@ -1030,11 +1036,12 @@ l_elf_scn_getshdr(lua_State *L)
 static int
 l_elf_scn_tostring(lua_State *L)
 {
-	Elf_Scn **ud;
+	struct udataElfScn *ud;
 
 	ud = test_elf_scn_udata(L, 1);
+	assert(ud != NULL);
 
-	lua_pushfstring(L, "Elf_Scn%s@%p", *ud ? "" : "(inactive)", ud);
+	lua_pushfstring(L, "Elf_Scn%s@%p", ud->scn ? "" : "(inactive)", ud);
 	return 1;
 }
 
