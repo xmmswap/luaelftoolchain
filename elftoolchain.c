@@ -42,6 +42,28 @@ struct KV {
 	const char *val;
 };
 
+/*
+ * See also l_elf_ehdr_index.
+ */
+static const char *ehdr_fields[] = {
+	"type",
+	"class",
+	"entry",
+	"flags",
+	"ident",
+	"phnum",
+	"phoff",
+	"shnum",
+	"shoff",
+	"ehsize",
+	"machine",
+	"version",
+	"shstrndx",
+	"phentsize",
+	"shentsize",
+	NULL
+};
+
 /* e_type values. */
 static const struct KV et_constants[] = {
 	{ ET_NONE, "NONE" },
@@ -185,6 +207,20 @@ static const struct KV sht_constants[] = {
 	{ SHT_SYMTAB_SHNDX, "SYMTAB_SHNDX" },
 };
 
+static int
+l_next_field(lua_State *L)
+{
+
+	/* Make sure there is a slot for lua_next() to pop. */
+	lua_settop(L, 2);
+
+	if (lua_next(L, 1) == 0)
+		return 0;
+
+	lua_pop(L, 1);
+	return 1;
+}
+
 /*
  * [-0, +2-1, -]
  * Push a string constant if key is found in constants, push key otherwise.
@@ -320,6 +356,18 @@ l_elf_getehdr(lua_State *L)
 	return 1;
 }
 
+/*
+ * Return an iterator over GElf_Ehdr fields.
+ */
+static int
+l_elf_ehdr_fields(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_next_field);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, ehdr_fields);
+	return 2;
+}
+
 static int
 l_elf_ehdr_index(lua_State *L)
 {
@@ -403,9 +451,20 @@ l_elf_ehdr_index(lua_State *L)
 		break;
 	case 6:
 		/* ehsize - sizeof ehdr */
-		/* XXX fields - return an iterator */
-		found = !strcmp(key, "ehsize");
-		val = ehdr->e_ehsize;
+		/* fields - return an iterator */
+		switch (key[0]) {
+		case 'e':
+			found = !strcmp(key, "ehsize");
+			val = ehdr->e_ehsize;
+			break;
+		case 'f':
+			if (strcmp(key, "fields") != 0)
+				break;
+
+			lua_pushcfunction(L, l_elf_ehdr_fields);
+			return 1;
+		}
+
 		break;
 	case 7:
 		/* machine - machine type */
@@ -587,9 +646,7 @@ l_elf_nextscn(lua_State *L)
 }
 
 /*
- * Return an iterator over Elf_Scn objects:
- *
- *	for scn in elf:scn() do	... end
+ * Return an iterator over Elf_Scn objects.
  */
 static int
 l_elf_scn(lua_State *L)
@@ -980,6 +1037,19 @@ register_index(lua_State *L, const luaL_Reg index[])
 }
 
 static void
+push_fields(lua_State *L, const char *fields[])
+{
+	size_t i;
+
+	lua_createtable(L, 0, 0);
+
+	for (i = 0; fields[i] != NULL; i++) {
+		lua_pushboolean(L, false);
+		lua_setfield(L, -2, fields[i]);
+	}
+}
+
+static void
 push_constants(lua_State *L, const struct KV kv[])
 {
 	size_t i;
@@ -1047,6 +1117,9 @@ luaopen_elftoolchain(lua_State *L)
 {
 	if (elf_version(EV_CURRENT) == EV_NONE)
 		return luaL_error(L, "ELF library is too old");
+
+	push_fields(L, ehdr_fields);
+	lua_rawsetp(L, LUA_REGISTRYINDEX, &ehdr_fields);
 
 	push_constants(L, et_constants);
 	lua_rawsetp(L, LUA_REGISTRYINDEX, &et_constants);
