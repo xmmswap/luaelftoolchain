@@ -6,6 +6,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -16,18 +17,17 @@
 #include <lauxlib.h>
 
 #include <libelf.h>
+#include <gelf.h>
 
 #define ELF_MT "elftoolchain::Elf"
+#define ELF_EHDR_MT "elftoolchain::GElf_Ehdr"
 #define ELF_SCN_MT "elftoolchain::Elf_Scn"
 #define ELF_ARSYM_MT "elftoolchain::Elf_Arsym"
 
 struct udataElf {
 	Elf *elf;
-	void *ehdr; /* Cached Elf64_Ehdr or Elf32_Ehdr object. */
 	void *mem; /* XXX implement */
 	int fd;
-	int flags;
-#define EHDR64 1
 };
 
 struct udataElfScn {
@@ -185,6 +185,27 @@ static const struct KV sht_constants[] = {
 	{ SHT_SYMTAB_SHNDX, "SYMTAB_SHNDX" },
 };
 
+/*
+ * [-0, +2-1, -]
+ * Push a string constant if key is found in constants, push key otherwise.
+ */
+static void
+push_constant(lua_State *L, lua_Integer key, const struct KV constants[])
+{
+	int newtop;
+
+	newtop = lua_gettop(L) + 1;
+
+	lua_rawgetp(L, LUA_REGISTRYINDEX, constants);
+	lua_rawgeti(L, -1, key);
+
+	if (lua_isnil(L, -1))
+		lua_pushinteger(L, key);
+
+	lua_replace(L, newtop);
+	lua_settop(L, newtop);
+}
+
 static int
 elf_is_closed(lua_State *L, int arg)
 {
@@ -222,6 +243,27 @@ check_elf_scn_udata(lua_State *L, int arg)
 	return (struct udataElfScn *)luaL_checkudata(L, arg, ELF_SCN_MT);
 }
 
+static GElf_Ehdr *
+push_gelf_ehdr_udata(lua_State *L)
+{
+	GElf_Ehdr *ud;
+
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
+
+	luaL_getmetatable(L, ELF_EHDR_MT);
+	lua_setmetatable(L, -2);
+
+	return ud;
+}
+
+static GElf_Ehdr *
+check_gelf_ehdr_udata(lua_State *L, int arg)
+{
+
+	return (GElf_Ehdr *)luaL_checkudata(L, arg, ELF_EHDR_MT);
+}
+
 static int
 push_err_results(lua_State *L, int err, const char *errmsg)
 {
@@ -245,9 +287,7 @@ l_elf_begin(lua_State *L)
 
 	ud = (struct udataElf *)lua_newuserdata(L, sizeof(*ud));
 	ud->elf = NULL;
-	ud->ehdr = NULL;
 	ud->mem = NULL;
-	ud->flags = 0;
 
 	luaL_getmetatable(L, ELF_MT);
 	lua_setmetatable(L, -2);
@@ -265,520 +305,149 @@ l_elf_begin(lua_State *L)
 	return 1;
 }
 
-/*
- * XXX Extract EI_CLASS EI_DATA EI_VERSION EI_OSABI EI_ABIVERSION from e_ident.
- */
-static int
-init_ehdr_push(lua_State *L, struct udataElf *ud, int elf_arg)
-{
-	const char *ident, *class;
-	lua_Integer type;	/* file type */
-	lua_Integer machine;	/* machine type */
-	lua_Integer version;	/* version number */
-	lua_Integer entry;	/* entry point */
-	lua_Integer phoff;	/* Program hdr offset */
-	lua_Integer shoff;	/* Section hdr offset */
-	lua_Integer flags;	/* Processor flags */
-	lua_Integer ehsize;	/* sizeof ehdr */
-	lua_Integer phentsize;	/* Program header entry size */
-	lua_Integer phnum;	/* Number of program headers */
-	lua_Integer shentsize;	/* Section header entry size */
-	lua_Integer shnum;	/* Number of section headers */
-	lua_Integer shstrndx;	/* String table index */
-	int err;
-
-	assert(ud->ehdr == NULL);
-
-	ud->ehdr = elf32_getehdr(ud->elf);
-	err = elf_errno();
-
-	if (ud->ehdr == NULL && err == ELF_E_CLASS) {
-		ud->ehdr = elf64_getehdr(ud->elf);
-		err = elf_errno();
-
-		if (ud->ehdr != NULL)
-			ud->flags |= EHDR64;
-	}
-
-	if (ud->ehdr == NULL)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		class = "ELFCLASS64";
-		ident = (const char *)h->e_ident;
-		type = h->e_type;
-		machine = h->e_machine;
-		version = h->e_version;
-		entry = h->e_entry;
-		phoff = h->e_phoff;
-		shoff = h->e_shoff;
-		flags = h->e_flags;
-		ehsize = h->e_ehsize;
-		phentsize = h->e_phentsize;
-		phnum = h->e_phnum;
-		shentsize = h->e_shentsize;
-		shnum = h->e_shnum;
-		shstrndx = h->e_shstrndx;
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		class = "ELFCLASS32";
-		ident = (const char *)h->e_ident;
-		type = h->e_type;
-		machine = h->e_machine;
-		version = h->e_version;
-		entry = h->e_entry;
-		phoff = h->e_phoff;
-		shoff = h->e_shoff;
-		flags = h->e_flags;
-		ehsize = h->e_ehsize;
-		phentsize = h->e_phentsize;
-		phnum = h->e_phnum;
-		shentsize = h->e_shentsize;
-		shnum = h->e_shnum;
-		shstrndx = h->e_shstrndx;
-	}
-
-	lua_createtable(L, 0, 15);
-
-	lua_pushstring(L, class);
-	lua_setfield(L, -2, "class");
-	lua_pushlstring(L, ident, ELF_NIDENT);
-	lua_setfield(L, -2, "ident");
-	lua_pushinteger(L, version);
-	lua_setfield(L, -2, "version");
-	lua_pushinteger(L, entry);
-	lua_setfield(L, -2, "entry");
-	lua_pushinteger(L, phoff);
-	lua_setfield(L, -2, "phoff");
-	lua_pushinteger(L, shoff);
-	lua_setfield(L, -2, "shoff");
-	lua_pushinteger(L, flags);
-	lua_setfield(L, -2, "flags");
-	lua_pushinteger(L, ehsize);
-	lua_setfield(L, -2, "ehsize");
-	lua_pushinteger(L, phentsize);
-	lua_setfield(L, -2, "phentsize");
-	lua_pushinteger(L, phnum);
-	lua_setfield(L, -2, "phnum");
-	lua_pushinteger(L, shentsize);
-	lua_setfield(L, -2, "shentsize");
-	lua_pushinteger(L, shnum);
-	lua_setfield(L, -2, "shnum");
-	lua_pushinteger(L, shstrndx);
-	lua_setfield(L, -2, "shstrndx");
-
-	/* Push e_type. */
-	lua_rawgetp(L, LUA_REGISTRYINDEX, et_constants);
-	lua_rawgeti(L, -1, type);
-
-	if (lua_isnil(L, -1)) {
-		lua_pushinteger(L, type);
-		lua_replace(L, -2);
-	}
-
-	lua_setfield(L, -3, "type");
-	lua_pop(L, 1);
-
-	/* Push e_machine. */
-	lua_rawgetp(L, LUA_REGISTRYINDEX, em_constants);
-	lua_rawgeti(L, -1, machine);
-
-	if (lua_isnil(L, -1)) {
-		lua_pushinteger(L, machine);
-		lua_replace(L, -2);
-	}
-
-	lua_setfield(L, -3, "machine");	/* machine type */
-	lua_pop(L, 1);
-
-	/* Cache in userdata. */
-	lua_pushvalue(L, -1);
-	lua_setuservalue(L, elf_arg);
-
-	return 1;
-}
-
 static int
 l_elf_getehdr(lua_State *L)
 {
 	struct udataElf *ud;
+	GElf_Ehdr *ehdr;
 
 	ud = check_elf_udata(L, 1, 1);
+	ehdr = push_gelf_ehdr_udata(L);
 
-	if (ud->ehdr != NULL) {
-		/* Already cached in userdata. */
-		lua_getuservalue(L, 1);
+	if (gelf_getehdr(ud->elf, ehdr) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	return 1;
+}
+
+static int
+l_elf_ehdr_index(lua_State *L)
+{
+	GElf_Ehdr *ehdr;
+	const char *key;
+	size_t len;
+	lua_Integer val;
+	bool found = false;
+
+	ehdr = check_gelf_ehdr_udata(L, 1);
+	key = luaL_checklstring(L, 2, &len);
+
+	/*
+	 * XXX Extract EI_DATA EI_VERSION EI_OSABI EI_ABIVERSION from e_ident.
+	 */
+	switch (len) {
+	case 4:
+		/* type - file type */
+		if (strcmp(key, "type") != 0)
+			break;
+
+		push_constant(L, ehdr->e_type, et_constants);
 		return 1;
+	case 5:
+		/* class - ELFCLASS32 or ELFCLASS64 */
+		/* entry - entry point */
+		/* flags - Processor flags */
+		/* ident - Id bytes */
+		/* phnum - Number of program headers */
+		/* phoff - Program hdr offset */
+		/* shnum - Section header entry size */
+		/* shoff - Section hdr offset */
+		switch (key[0]) {
+			bool isnum;
+		case 'c':
+			if (strcmp(key, "class") != 0)
+				break;
+
+			switch (ehdr->e_ident[EI_CLASS]) {
+			case ELFCLASSNONE:
+				lua_pushstring(L, "ELFCLASSNONE");
+				return 1;
+			case ELFCLASS32:
+				lua_pushstring(L, "ELFCLASS32");
+				return 1;
+			case ELFCLASS64:
+				lua_pushstring(L, "ELFCLASS64");
+				return 1;
+			default:
+				found = false;
+				break;
+			}
+
+			break;
+		case 'e':
+			found = !strcmp(key, "entry");
+			val = ehdr->e_entry;
+			break;
+		case 'f':
+			found = !strcmp(key, "flags");
+			val = ehdr->e_flags;
+			break;
+		case 'i':
+			if (strcmp(key, "ident") != 0)
+				break;
+
+			lua_pushlstring(L,
+			    (const char *)ehdr->e_ident, ELF_NIDENT);
+			return 1;
+		case 'p':
+			isnum = key[2] == 'n';
+			found = !strcmp(key, isnum ? "phnum" : "phoff");
+			val = isnum ? ehdr->e_phnum : ehdr->e_phoff;
+			break;
+		case 's':
+			isnum = key[2] == 'n';
+			found = !strcmp(key, isnum ? "shnum" : "shoff");
+			val = isnum ? ehdr->e_shnum : ehdr->e_shoff;
+			break;
+		}
+		break;
+	case 6:
+		/* ehsize - sizeof ehdr */
+		/* XXX fields - return an iterator */
+		found = !strcmp(key, "ehsize");
+		val = ehdr->e_ehsize;
+		break;
+	case 7:
+		/* machine - machine type */
+		/* version - version number */
+		switch (key[0]) {
+		case 'm':
+			if (strcmp(key, "machine") != 0)
+				break;
+
+			push_constant(L, ehdr->e_machine, em_constants);
+			return 1;
+		case 'v':
+			found = !strcmp(key, "version");
+			val = ehdr->e_version;
+			break;
+		}
+		break;
+	case 8:
+		/* shstrndx - String table index */
+		found = !strcmp(key, "shstrndx");
+		val = ehdr->e_shstrndx;
+		break;
+	case 9:
+		/* phentsize - Program header entry size */
+		/* shentsize - Section header entry size */
+		switch (key[0]) {
+		case 'p':
+			found = !strcmp(key, "phentsize");
+			val = ehdr->e_phentsize;
+			break;
+		case 's':
+			found = !strcmp(key, "shentsize");
+			val = ehdr->e_shentsize;
+			break;
+		}
+		break;
 	}
 
-	return init_ehdr_push(L, ud, 1);
-}
+	if (!found)
+		return 0;
 
-static int
-l_elf_class(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	lua_pushstring(L, (ud->flags & EHDR64) ? "ELFCLASS64" : "ELFCLASS32");
-	return 1;
-}
-
-static int
-l_elf_ident(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushlstring(L, (const char *)h->e_ident, ELF_NIDENT);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushlstring(L, (const char *)h->e_ident, ELF_NIDENT);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_type(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	lua_getuservalue(L, 1);
-	lua_getfield(L, -1, "type");
-	return 1;
-}
-
-static int
-l_elf_machine(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	lua_getuservalue(L, 1);
-	lua_getfield(L, -1, "machine");
-	return 1;
-}
-
-static int
-l_elf_version(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_version);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_version);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_entry(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_entry);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_entry);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_phoff(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_phoff);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_phoff);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_shoff(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_shoff);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_shoff);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_flags(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_flags);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_flags);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_ehsize(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_ehsize);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_ehsize);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_phentsize(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_phentsize);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_phentsize);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_phnum(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_phnum);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_phnum);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_shentsize(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_shentsize);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_shentsize);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_shnum(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_shnum);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_shnum);
-	}
-
-	return 1;
-}
-
-static int
-l_elf_shstrndx(lua_State *L)
-{
-	struct udataElf *ud;
-	int num_pushed;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	if (ud->ehdr == NULL && (num_pushed = init_ehdr_push(L, ud, 1)) > 1)
-		return num_pushed; /* nil, errmsg, errno. */
-
-	assert(ud->ehdr != NULL);
-
-	if (ud->flags & EHDR64) {
-		Elf64_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_shstrndx);
-	} else {
-		Elf32_Ehdr *h = ud->ehdr;
-
-		lua_pushinteger(L, h->e_shstrndx);
-	}
-
+	lua_pushinteger(L, val);
 	return 1;
 }
 
@@ -1042,18 +711,8 @@ l_elf_scn_getshdr(lua_State *L)
 	lua_setfield(L, -2, "addralign");
 	lua_pushinteger(L, entsize);
 	lua_setfield(L, -2, "entsize");
-
-	/* Push sh_type. */
-	lua_rawgetp(L, LUA_REGISTRYINDEX, sht_constants);
-	lua_rawgeti(L, -1, type);
-
-	if (lua_isnil(L, -1)) {
-		lua_pushinteger(L, type);
-		lua_replace(L, -2);
-	}
-
+	push_constant(L, type, sht_constants);
 	lua_setfield(L, -3, "type");
-	lua_pop(L, 1);
 
 	return 1;
 }
@@ -1102,13 +761,7 @@ l_elf_scn_type(lua_State *L)
 		type = h->sh_type;
 	}
 
-	/* Push sh_type. */
-	lua_rawgetp(L, LUA_REGISTRYINDEX, sht_constants);
-	lua_rawgeti(L, -1, type);
-
-	if (lua_isnil(L, -1))
-		lua_pushinteger(L, type);
-
+	push_constant(L, type, sht_constants);
 	return 1;
 }
 
@@ -1344,21 +997,6 @@ static const luaL_Reg elftoolchain[] = {
 	{ "elf_end", l_elf_gc },
 	{ "nextscn", l_elf_nextscn },
 	{ "getehdr", l_elf_getehdr },
-	{ "class", l_elf_class },
-	{ "ident", l_elf_ident },
-	{ "type", l_elf_type },
-	{ "machine", l_elf_machine },
-	{ "version", l_elf_version },
-	{ "entry", l_elf_entry },
-	{ "phoff", l_elf_phoff },
-	{ "shoff", l_elf_shoff },
-	{ "flags", l_elf_flags },
-	{ "ehsize", l_elf_ehsize },
-	{ "phentsize", l_elf_phentsize },
-	{ "phnum", l_elf_phnum },
-	{ "shentsize", l_elf_shentsize },
-	{ "shnum", l_elf_shnum },
-	{ "shstrndx", l_elf_shstrndx },
 	{ "getshdrnum", l_elf_getshdrnum },
 	{ "getphdrnum", l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
@@ -1377,20 +1015,6 @@ static const luaL_Reg elf_index[] = {
 	{ "nextscn", l_elf_nextscn },
 	{ "scn", l_elf_scn },
 	{ "getehdr", l_elf_getehdr },
-	{ "ident", l_elf_ident },
-	{ "type", l_elf_type },
-	{ "machine", l_elf_machine },
-	{ "version", l_elf_version },
-	{ "entry", l_elf_entry },
-	{ "phoff", l_elf_phoff },
-	{ "shoff", l_elf_shoff },
-	{ "flags", l_elf_flags },
-	{ "ehsize", l_elf_ehsize },
-	{ "phentsize", l_elf_phentsize },
-	{ "phnum", l_elf_phnum },
-	{ "shentsize", l_elf_shentsize },
-	{ "shnum", l_elf_shnum },
-	{ "shstrndx", l_elf_shstrndx },
 	{ "getshdrnum", l_elf_getshdrnum },
 	{ "getphdrnum", l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
@@ -1440,6 +1064,11 @@ luaopen_elftoolchain(lua_State *L)
 	luaL_newmetatable(L, ELF_SCN_MT);
 	luaL_setfuncs(L, elf_scn_mt, 0);
 	register_index(L, elf_scn_index);
+
+	luaL_newmetatable(L, ELF_EHDR_MT);
+	lua_pushstring(L, "__index");
+	lua_pushcfunction(L, l_elf_ehdr_index);
+	lua_rawset(L, -3);
 
 	luaL_newlibtable(L, elftoolchain);
 	luaL_setfuncs(L, elftoolchain, 0);
