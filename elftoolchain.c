@@ -19,12 +19,14 @@
 #include <libelf.h>
 #include <gelf.h>
 
-#define ELF_MT "elftoolchain::Elf"
-#define ELF_SCN_MT "elftoolchain::Elf_Scn"
-#define ELF_DATA_MT "elftoolchain::Elf_Data"
+#define MT_PREFIX "elftoolchain."
+#define ELF_MT       MT_PREFIX "Elf"
+#define ELF_SCN_MT   MT_PREFIX "Elf_Scn"
+#define ELF_DATA_MT  MT_PREFIX "Elf_Data"
 
-#define ELF_EHDR_MT "elftoolchain::GElf_Ehdr"
-#define ELF_SHDR_MT "elftoolchain::GElf_Shdr"
+#define ELF_EHDR_MT  MT_PREFIX "GElf_Ehdr"
+#define ELF_SHDR_MT  MT_PREFIX "GElf_Shdr"
+#define ELF_SYM_MT   MT_PREFIX "GElf_Sym"
 
 struct udataElf {
 	Elf *elf;
@@ -81,6 +83,19 @@ static const char *shdr_fields[] = {
 	"offset",
 	"entsize",
 	"addralign",
+	NULL
+};
+
+/*
+ * All public fields of GElf_Sym struct.
+ */
+static const char *sym_fields[] = {
+	"info",
+	"name",
+	"size",
+	"other",
+	"shndx",
+	"value",
 	NULL
 };
 
@@ -227,6 +242,17 @@ static const struct KV sht_constants[] = {
 	{ SHT_SYMTAB_SHNDX, "SYMTAB_SHNDX" },
 };
 
+/* st_info values. */
+static const struct KV stt_constants[] = {
+	{ STT_NOTYPE, "NOTYPE" },
+	{ STT_OBJECT, "OBJECT" },
+	{ STT_FUNC, "FUNC" },
+	{ STT_SECTION, "SECTION" },
+	{ STT_FILE, "FILE" },
+	{ STT_COMMON, "COMMON" },
+	{ STT_TLS, "TLS" },
+};
+
 static int
 l_next_field(lua_State *L)
 {
@@ -253,9 +279,8 @@ push_constant(lua_State *L, lua_Integer key, const struct KV constants[])
 	newtop = lua_gettop(L) + 1;
 
 	lua_rawgetp(L, LUA_REGISTRYINDEX, constants);
-	lua_rawgeti(L, -1, key);
 
-	if (lua_isnil(L, -1))
+	if (lua_rawgeti(L, -1, key) == LUA_TNIL)
 		lua_pushinteger(L, key);
 
 	lua_replace(L, newtop);
@@ -350,13 +375,6 @@ check_gelf_ehdr_udata(lua_State *L, int arg)
 	return (GElf_Ehdr *)luaL_checkudata(L, arg, ELF_EHDR_MT);
 }
 
-static GElf_Ehdr *
-test_gelf_ehdr_udata(lua_State *L, int arg)
-{
-
-	return (GElf_Ehdr *)luaL_testudata(L, arg, ELF_EHDR_MT);
-}
-
 static GElf_Shdr *
 push_gelf_shdr_udata(lua_State *L)
 {
@@ -378,11 +396,25 @@ check_gelf_shdr_udata(lua_State *L, int arg)
 	return (GElf_Shdr *)luaL_checkudata(L, arg, ELF_SHDR_MT);
 }
 
-static GElf_Shdr *
-test_gelf_shdr_udata(lua_State *L, int arg)
+static GElf_Sym *
+push_gelf_sym_udata(lua_State *L)
+{
+	GElf_Sym *ud;
+
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
+
+	luaL_getmetatable(L, ELF_SYM_MT);
+	lua_setmetatable(L, -2);
+
+	return ud;
+}
+
+static GElf_Sym *
+check_gelf_sym_udata(lua_State *L, int arg)
 {
 
-	return (GElf_Shdr *)luaL_testudata(L, arg, ELF_SHDR_MT);
+	return (GElf_Sym *)luaL_checkudata(L, arg, ELF_SYM_MT);
 }
 
 static int
@@ -465,37 +497,33 @@ l_gelf_shdr_fields(lua_State *L)
 	return 2;
 }
 
+/*
+ * Return an iterator over GElf_Sym fields.
+ */
+static int
+l_gelf_sym_fields(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_next_field);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, sym_fields);
+	return 2;
+}
+
 static int
 l_gelf_fields(lua_State *L)
 {
-	const char *str;
-	size_t len;
 
-	switch (lua_type(L, 1)) {
-	case LUA_TUSERDATA:
-		if (test_gelf_ehdr_udata(L, 1))
-			return l_gelf_ehdr_fields(L);
+	lua_pushvalue(L, lua_upvalueindex(1));
 
-		if (test_gelf_shdr_udata(L, 1))
-			return l_gelf_shdr_fields(L);
+	if (!lua_getmetatable(L, 1))
+		lua_pushvalue(L, 1);
 
-		break;
-	case LUA_TSTRING:
-		str = lua_tolstring(L, 1, &len);
+	if (lua_rawget(L, -2) == LUA_TNIL)
+		return 0;
 
-		if (len != 4 || strcmp(str + 1, "hdr") != 0)
-			break;
-
-		if (str[0] == 'e' || str[0] == 'E')
-			return l_gelf_ehdr_fields(L);
-
-		if (str[0] == 's' || str[0] == 'S')
-			return l_gelf_shdr_fields(L);
-
-		break;
-	}
-
-	return luaL_argerror(L, 1, "expected string [EeSs]hdr or userdata");
+	lua_pushcfunction(L, &l_next_field);
+	lua_pushvalue(L, -2);
+	return 2;
 }
 
 /* XXX Implement l_gelf_ehdr_newindex. */
@@ -727,6 +755,78 @@ l_gelf_shdr_index(lua_State *L)
 		found = !strcmp(key, "addralign");
 		val = shdr->sh_addralign;
 		break;
+	}
+
+	if (!found)
+		return 0;
+
+	lua_pushinteger(L, val);
+	return 1;
+}
+
+/* XXX Implement l_gelf_sym_newindex. */
+static int
+l_gelf_sym_index(lua_State *L)
+{
+	GElf_Sym *sym;
+	const char *key;
+	size_t len;
+	lua_Integer val;
+	bool found = false;
+
+	sym = check_gelf_sym_udata(L, 1);
+	key = luaL_checklstring(L, 2, &len);
+
+	switch (len) {
+	case 4:
+		/* info - type / binding attrs */
+		/* name - Symbol name (.strtab index) */
+		/* size - size of symbol */
+		switch (key[0]) {
+		case 'i':
+			if (strcmp(key, "info") != 0)
+				break;
+
+			push_constant(L, sym->st_info, stt_constants);
+			return 1;
+		case 'n':
+			found = !strcmp(key, "name");
+			val = sym->st_name;
+			break;
+		case 's':
+			found = !strcmp(key, "size");
+			val = sym->st_size;
+			break;
+		}
+
+		break;
+	case 5:
+		/* other - unused */
+		/* shndx - section index of symbol */
+		/* value - value of symbol */
+		switch (key[0]) {
+		case 'o':
+			found = !strcmp(key, "other");
+			val = sym->st_other;
+			break;
+		case 's':
+			found = !strcmp(key, "shndx");
+			val = sym->st_shndx;
+			break;
+		case 'v':
+			found = !strcmp(key, "value");
+			val = sym->st_value;
+			break;
+		}
+
+		break;
+	case 6:
+		/* fields - return an iterator */
+		if (strcmp(key, "fields") != 0)
+			break;
+
+		lua_pushcfunction(L, l_gelf_sym_fields);
+		return 1;
 	}
 
 	if (!found)
@@ -995,6 +1095,23 @@ l_elf_scn_data(lua_State *L)
 }
 
 static int
+l_elf_data_getsym(lua_State *L)
+{
+	struct udataElfData *ud;
+	GElf_Sym *sym;
+	lua_Integer ndx;
+
+	ud = check_elf_data_udata(L, 1);
+	ndx = luaL_checkinteger(L, 2);
+	sym = push_gelf_sym_udata(L);
+
+	if (gelf_getsym(ud->data, ndx, sym) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	return 1;
+}
+
+static int
 l_elf_scn_tostring(lua_State *L)
 {
 	struct udataElfScn *ud;
@@ -1029,20 +1146,35 @@ register_index(lua_State *L, const luaL_Reg index[])
 }
 
 static void
-push_fields(lua_State *L, const char *fields[])
+register_fields(lua_State *L, int reg, const char *mt, const char *fields[])
 {
 	size_t i;
 
-	lua_createtable(L, 0, 0);
+	if (reg < 0)
+		reg += lua_gettop(L) + 1;
+
+	assert(reg > 0 && lua_type(L, reg) == LUA_TTABLE);
+	assert(strchr(MT_PREFIX, '_') == NULL);
+
+	luaL_getmetatable(L, mt); /* mtkey */
+	lua_createtable(L, 0, 0); /* t */
 
 	for (i = 0; fields[i] != NULL; i++) {
 		lua_pushboolean(L, false);
 		lua_setfield(L, -2, fields[i]);
 	}
+
+	lua_pushvalue(L, -1); /* t */
+	lua_rawsetp(L, LUA_REGISTRYINDEX, fields);
+
+	lua_pushvalue(L, -1); /* t */
+	lua_setfield(L, reg, strchr(mt, '_') + 1);
+
+	lua_rawset(L, reg); /* reg[mtkey] =  t */
 }
 
 static void
-push_constants(lua_State *L, const struct KV kv[])
+register_constants(lua_State *L, const struct KV kv[])
 {
 	size_t i;
 
@@ -1052,6 +1184,8 @@ push_constants(lua_State *L, const struct KV kv[])
 		lua_pushstring(L, kv[i].val);
 		lua_rawseti(L, -2, kv[i].key);
 	}
+
+	lua_rawsetp(L, LUA_REGISTRYINDEX, kv);
 }
 
 static const luaL_Reg elftoolchain[] = {
@@ -1064,6 +1198,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getshstrndx", l_elf_getshstrndx },
 	{ "getshdr", l_elf_scn_getshdr },
 	{ "getdata", l_elf_scn_getdata },
+	{ "getsym", l_elf_data_getsym },
 	{ "fields", l_gelf_fields },
 	{ NULL, NULL }
 };
@@ -1105,6 +1240,7 @@ static const luaL_Reg elf_data_mt[] = {
 
 static const luaL_Reg elf_data_index[] = {
 	{ "next", l_elf_data_next },
+	{ "getsym", l_elf_data_getsym },
 	{ NULL, NULL }
 };
 
@@ -1114,20 +1250,10 @@ luaopen_elftoolchain(lua_State *L)
 	if (elf_version(EV_CURRENT) == EV_NONE)
 		return luaL_error(L, "ELF library is too old");
 
-	push_fields(L, ehdr_fields);
-	lua_rawsetp(L, LUA_REGISTRYINDEX, &ehdr_fields);
-
-	push_fields(L, shdr_fields);
-	lua_rawsetp(L, LUA_REGISTRYINDEX, &shdr_fields);
-
-	push_constants(L, et_constants);
-	lua_rawsetp(L, LUA_REGISTRYINDEX, &et_constants);
-
-	push_constants(L, em_constants);
-	lua_rawsetp(L, LUA_REGISTRYINDEX, &em_constants);
-
-	push_constants(L, sht_constants);
-	lua_rawsetp(L, LUA_REGISTRYINDEX, &sht_constants);
+	register_constants(L, et_constants);
+	register_constants(L, em_constants);
+	register_constants(L, sht_constants);
+	register_constants(L, stt_constants);
 
 	luaL_newmetatable(L, ELF_MT);
 	luaL_setfuncs(L, elf_mt, 0);
@@ -1151,8 +1277,19 @@ luaopen_elftoolchain(lua_State *L)
 	lua_pushcfunction(L, l_gelf_shdr_index);
 	lua_rawset(L, -3);
 
+	luaL_newmetatable(L, ELF_SYM_MT);
+	lua_pushstring(L, "__index");
+	lua_pushcfunction(L, l_gelf_sym_index);
+	lua_rawset(L, -3);
+
 	luaL_newlibtable(L, elftoolchain);
-	luaL_setfuncs(L, elftoolchain, 0);
+
+	lua_createtable(L, 0, 0); /* upvalue */
+	register_fields(L, -1, ELF_EHDR_MT, ehdr_fields);
+	register_fields(L, -1, ELF_SHDR_MT, shdr_fields);
+	register_fields(L, -1, ELF_SYM_MT,  sym_fields);
+
+	luaL_setfuncs(L, elftoolchain, 1);
 
 	return 1;
 }
