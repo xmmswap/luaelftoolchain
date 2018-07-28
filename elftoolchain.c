@@ -887,6 +887,25 @@ l_elf_getshstrndx(lua_State *L)
 	return 1;
 }
 
+/* XXX Return userdata ? */
+static int
+l_elf_strptr(lua_State *L)
+{
+	struct udataElf *ud;
+	lua_Integer scndx, stroffset;
+	char *str;
+
+	ud = check_elf_udata(L, 1, 1);
+	scndx = luaL_checkinteger(L, 2);
+	stroffset = luaL_checkinteger(L, 3);
+
+	if ((str = elf_strptr(ud->elf, scndx, stroffset)) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	lua_pushstring(L, str);
+	return 1;
+}
+
 static int
 l_elf_gc(lua_State *L)
 {
@@ -1198,6 +1217,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getshdrnum", l_elf_getshdrnum },
 	{ "getphdrnum", l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
+	{ "strptr", l_elf_strptr },
 	{ "getshdr", l_elf_scn_getshdr },
 	{ "getdata", l_elf_scn_getdata },
 	{ "getsym", l_elf_data_getsym },
@@ -1219,6 +1239,7 @@ static const luaL_Reg elf_index[] = {
 	{ "getshdrnum", l_elf_getshdrnum },
 	{ "getphdrnum", l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
+	{ "strptr", l_elf_strptr },
 	{ NULL, NULL }
 };
 
