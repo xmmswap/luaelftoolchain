@@ -368,6 +368,7 @@ l_elf_ehdr_fields(lua_State *L)
 	return 2;
 }
 
+/* XXX Implement l_elf_ehdr_newindex. */
 static int
 l_elf_ehdr_index(lua_State *L)
 {
