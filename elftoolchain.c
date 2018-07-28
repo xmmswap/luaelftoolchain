@@ -515,7 +515,9 @@ l_gelf_fields(lua_State *L)
 
 	lua_pushvalue(L, lua_upvalueindex(1));
 
-	if (!lua_getmetatable(L, 1))
+	if (lua_type(L, 1) == LUA_TUSERDATA)
+		lua_getmetatable(L, 1);
+	else
 		lua_pushvalue(L, 1);
 
 	if (lua_rawget(L, -2) == LUA_TNIL)
