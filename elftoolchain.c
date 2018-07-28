@@ -20,10 +20,11 @@
 #include <gelf.h>
 
 #define ELF_MT "elftoolchain::Elf"
+#define ELF_SCN_MT "elftoolchain::Elf_Scn"
+#define ELF_DATA_MT "elftoolchain::Elf_Data"
+
 #define ELF_EHDR_MT "elftoolchain::GElf_Ehdr"
 #define ELF_SHDR_MT "elftoolchain::GElf_Shdr"
-#define ELF_SCN_MT "elftoolchain::Elf_Scn"
-#define ELF_ARSYM_MT "elftoolchain::Elf_Arsym"
 
 struct udataElf {
 	Elf *elf;
@@ -33,6 +34,10 @@ struct udataElf {
 
 struct udataElfScn {
 	Elf_Scn *scn;
+};
+
+struct udataElfData {
+	Elf_Data *data;
 };
 
 struct KV {
@@ -292,6 +297,20 @@ check_elf_scn_udata(lua_State *L, int arg)
 {
 
 	return (struct udataElfScn *)luaL_checkudata(L, arg, ELF_SCN_MT);
+}
+
+static struct udataElfData *
+test_elf_data_udata(lua_State *L, int arg)
+{
+
+	return (struct udataElfData *)luaL_testudata(L, arg, ELF_DATA_MT);
+}
+
+static struct udataElfData *
+check_elf_data_udata(lua_State *L, int arg)
+{
+
+	return (struct udataElfData *)luaL_checkudata(L, arg, ELF_DATA_MT);
 }
 
 static GElf_Ehdr *
@@ -877,6 +896,71 @@ l_elf_scn_getshdr(lua_State *L)
 	return 1;
 }
 
+/*
+ * Call elf_getdata(3), wrap the returned object and push it to the L's stack.
+ * Uservalue of the pushed object is set to its parent Elf_Scn object at scn_arg.
+ */
+static int
+data_push(lua_State *L, Elf_Scn *scn, Elf_Data *data, int scn_arg)
+{
+	struct udataElfData *ud;
+
+	data = elf_getdata(scn, data);
+
+	if (data == NULL) {
+		/* XXX Error handling. */
+		lua_pushnil(L);
+		return 1;
+	}
+
+	ud = (struct udataElfData *)lua_newuserdata(L, sizeof(*ud));
+	ud->data = NULL;
+
+	luaL_getmetatable(L, ELF_DATA_MT);
+	lua_setmetatable(L, -2);
+
+	/* Keep a reference to the parent Elf_Scn object. */
+	assert(luaL_testudata(L, scn_arg, ELF_SCN_MT) != NULL);
+	lua_pushvalue(L, scn_arg);
+	lua_setuservalue(L, -2);
+
+	ud->data = data;
+
+	return 1;
+}
+
+static int
+l_elf_scn_getdata(lua_State *L)
+{
+	struct udataElfScn *scn;
+	struct udataElfData *ud;
+	Elf_Data *data;
+
+	scn = check_elf_scn_udata(L, 1);
+	ud = test_elf_data_udata(L, 2);
+	data = ud ? ud->data : NULL;
+
+	if (data != NULL) {
+		lua_getuservalue(L, 2);
+		if (lua_touserdata(L, -1) != scn)
+			return luaL_argerror(L, 2, "different parent");
+	}
+
+	return data_push(L, scn->scn, data, 1);
+}
+
+/*
+ * Return an iterator over Elf_Data objects.
+ */
+static int
+l_elf_scn_data(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_elf_scn_getdata);
+	lua_pushvalue(L, 1);
+	return 2;
+}
+
 static int
 l_elf_scn_tostring(lua_State *L)
 {
@@ -886,6 +970,18 @@ l_elf_scn_tostring(lua_State *L)
 	assert(ud != NULL);
 
 	lua_pushfstring(L, "Elf_Scn%s@%p", ud->scn ? "" : "(inactive)", ud);
+	return 1;
+}
+
+static int
+l_elf_data_tostring(lua_State *L)
+{
+	struct udataElfData *ud;
+
+	ud = test_elf_data_udata(L, 1);
+	assert(ud != NULL);
+
+	lua_pushfstring(L, "Elf_Data%s@%p", ud->data ? "" : "(inactive)", ud);
 	return 1;
 }
 
@@ -934,6 +1030,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getphdrnum", l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
 	{ "getshdr", l_elf_scn_getshdr },
+	{ "getdata", l_elf_scn_getdata },
 	{ "fields", l_gelf_fields },
 	{ NULL, NULL }
 };
@@ -963,6 +1060,17 @@ static const luaL_Reg elf_scn_mt[] = {
 static const luaL_Reg elf_scn_index[] = {
 	{ "next", l_elf_scn_next },
 	{ "getshdr", l_elf_scn_getshdr },
+	{ "getdata", l_elf_scn_getdata },
+	{ "data", l_elf_scn_data },
+	{ NULL, NULL }
+};
+
+static const luaL_Reg elf_data_mt[] = {
+	{ "__tostring", l_elf_data_tostring },
+	{ NULL, NULL }
+};
+
+static const luaL_Reg elf_data_index[] = {
 	{ NULL, NULL }
 };
 
@@ -994,6 +1102,10 @@ luaopen_elftoolchain(lua_State *L)
 	luaL_newmetatable(L, ELF_SCN_MT);
 	luaL_setfuncs(L, elf_scn_mt, 0);
 	register_index(L, elf_scn_index);
+
+	luaL_newmetatable(L, ELF_DATA_MT);
+	luaL_setfuncs(L, elf_data_mt, 0);
+	register_index(L, elf_data_index);
 
 	luaL_newmetatable(L, ELF_EHDR_MT);
 	lua_pushstring(L, "__index");
