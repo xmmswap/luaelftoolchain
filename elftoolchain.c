@@ -21,6 +21,7 @@
 
 #define ELF_MT "elftoolchain::Elf"
 #define ELF_EHDR_MT "elftoolchain::GElf_Ehdr"
+#define ELF_SHDR_MT "elftoolchain::GElf_Shdr"
 #define ELF_SCN_MT "elftoolchain::Elf_Scn"
 #define ELF_ARSYM_MT "elftoolchain::Elf_Arsym"
 
@@ -32,9 +33,6 @@ struct udataElf {
 
 struct udataElfScn {
 	Elf_Scn *scn;
-	void *shdr; /* Cached Elf32_Shdr or Elf64_Shdr object. */
-	int flags;
-#define SHDR64 1
 };
 
 struct KV {
@@ -43,7 +41,7 @@ struct KV {
 };
 
 /*
- * See also l_elf_ehdr_index.
+ * All public fields of GElf_Ehdr struct.
  */
 static const char *ehdr_fields[] = {
 	"type",
@@ -61,6 +59,23 @@ static const char *ehdr_fields[] = {
 	"shstrndx",
 	"phentsize",
 	"shentsize",
+	NULL
+};
+
+/*
+ * All public fields of GElf_Shdr struct.
+ */
+static const char *shdr_fields[] = {
+	"addr",
+	"info",
+	"link",
+	"name",
+	"size",
+	"type",
+	"flags",
+	"offset",
+	"entsize",
+	"addralign",
 	NULL
 };
 
@@ -300,6 +315,27 @@ check_gelf_ehdr_udata(lua_State *L, int arg)
 	return (GElf_Ehdr *)luaL_checkudata(L, arg, ELF_EHDR_MT);
 }
 
+static GElf_Shdr *
+push_gelf_shdr_udata(lua_State *L)
+{
+	GElf_Shdr *ud;
+
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
+
+	luaL_getmetatable(L, ELF_SHDR_MT);
+	lua_setmetatable(L, -2);
+
+	return ud;
+}
+
+static GElf_Shdr *
+check_gelf_shdr_udata(lua_State *L, int arg)
+{
+
+	return (GElf_Shdr *)luaL_checkudata(L, arg, ELF_SHDR_MT);
+}
+
 static int
 push_err_results(lua_State *L, int err, const char *errmsg)
 {
@@ -360,7 +396,7 @@ l_elf_getehdr(lua_State *L)
  * Return an iterator over GElf_Ehdr fields.
  */
 static int
-l_elf_ehdr_fields(lua_State *L)
+l_gelf_ehdr_fields(lua_State *L)
 {
 
 	lua_pushcfunction(L, &l_next_field);
@@ -368,9 +404,9 @@ l_elf_ehdr_fields(lua_State *L)
 	return 2;
 }
 
-/* XXX Implement l_elf_ehdr_newindex. */
+/* XXX Implement l_gelf_ehdr_newindex. */
 static int
-l_elf_ehdr_index(lua_State *L)
+l_gelf_ehdr_index(lua_State *L)
 {
 	GElf_Ehdr *ehdr;
 	const char *key;
@@ -449,6 +485,7 @@ l_elf_ehdr_index(lua_State *L)
 			val = isnum ? ehdr->e_shnum : ehdr->e_shoff;
 			break;
 		}
+
 		break;
 	case 6:
 		/* ehsize - sizeof ehdr */
@@ -462,7 +499,7 @@ l_elf_ehdr_index(lua_State *L)
 			if (strcmp(key, "fields") != 0)
 				break;
 
-			lua_pushcfunction(L, l_elf_ehdr_fields);
+			lua_pushcfunction(L, l_gelf_ehdr_fields);
 			return 1;
 		}
 
@@ -482,6 +519,7 @@ l_elf_ehdr_index(lua_State *L)
 			val = ehdr->e_version;
 			break;
 		}
+
 		break;
 	case 8:
 		/* shstrndx - String table index */
@@ -501,6 +539,111 @@ l_elf_ehdr_index(lua_State *L)
 			val = ehdr->e_shentsize;
 			break;
 		}
+
+		break;
+	}
+
+	if (!found)
+		return 0;
+
+	lua_pushinteger(L, val);
+	return 1;
+}
+
+/*
+ * Return an iterator over GElf_Shdr fields.
+ */
+static int
+l_gelf_shdr_fields(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_next_field);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, shdr_fields);
+	return 2;
+}
+
+/* XXX Implement l_gelf_shdr_newindex. */
+static int
+l_gelf_shdr_index(lua_State *L)
+{
+	GElf_Shdr *shdr;
+	const char *key;
+	size_t len;
+	lua_Integer val;
+	bool found = false;
+
+	shdr = check_gelf_shdr_udata(L, 1);
+	key = luaL_checklstring(L, 2, &len);
+
+	switch (len) {
+	case 4:
+		/* addr - virtual address */
+		/* info - misc info */
+		/* link - link to another */
+		/* name - section name (.shstrtab index) */
+		/* size - section size */
+		/* type - section type */
+		switch (key[0]) {
+		case 'a':
+			found = !strcmp(key, "addr");
+			val = shdr->sh_addr;
+			break;
+		case 'i':
+			found = !strcmp(key, "info");
+			val = shdr->sh_info;
+			break;
+		case 'l':
+			found = !strcmp(key, "link");
+			val = shdr->sh_link;
+			break;
+		case 'n':
+			found = !strcmp(key, "name");
+			val = shdr->sh_name;
+			break;
+		case 's':
+			found = !strcmp(key, "size");
+			val = shdr->sh_size;
+			break;
+		case 't':
+			if (strcmp(key, "type") != 0)
+				break;
+
+			push_constant(L, shdr->sh_type, sht_constants);
+			return 1;
+		}
+
+		break;
+	case 5:
+		/* flags - section flags */
+		found = !strcmp(key, "flags");
+		val = shdr->sh_flags;
+		break;
+	case 6:
+		/* fields - return an iterator */
+		/* offset - file offset */
+		switch (key[0]) {
+		case 'f':
+			if (strcmp(key, "fields") != 0)
+				break;
+
+			lua_pushcfunction(L, l_gelf_shdr_fields);
+			return 1;
+		case 'o':
+			found = !strcmp(key, "offset");
+			val = shdr->sh_offset;
+			break;
+		}
+
+		break;
+	case 7:
+		/* entsize - table entry size */
+		found = !strcmp(key, "entsize");
+		val = shdr->sh_entsize;
+		break;
+	case 9:
+		/* addralign - memory alignment */
+		found = !strcmp(key, "addralign");
+		val = shdr->sh_addralign;
 		break;
 	}
 
@@ -610,8 +753,6 @@ nextscn_push(lua_State *L, Elf *elf, Elf_Scn *scn, int elf_arg)
 
 	ud = (struct udataElfScn *)lua_newuserdata(L, sizeof(*ud));
 	ud->scn = NULL;
-	ud->shdr = NULL;
-	ud->flags = 0;
 
 	luaL_getmetatable(L, ELF_SCN_MT);
 	lua_setmetatable(L, -2);
@@ -675,343 +816,17 @@ l_elf_scn_next(lua_State *L)
 }
 
 static int
-check_elf_scn_udata_load_shdr(lua_State *L, int arg, struct udataElfScn **p)
-{
-	struct udataElfScn *ud;
-	int err;
-
-	ud = check_elf_scn_udata(L, arg);
-	*p = ud;
-
-	if (ud->shdr == NULL)
-		ud->shdr = elf32_getshdr(ud->scn);
-
-	if (ud->shdr != NULL)
-		return ELF_E_NONE;
-
-	err = elf_errno();
-	if (err != ELF_E_CLASS)
-		return err;
-
-	ud->shdr = elf64_getshdr(ud->scn);
-	if (ud->shdr == NULL)
-		return elf_errno();
-
-	ud->flags |= SHDR64;
-
-	return ELF_E_NONE;
-}
-
-static int
 l_elf_scn_getshdr(lua_State *L)
 {
 	struct udataElfScn *ud;
-	lua_Integer name;	/* section name (.shstrtab index) */
-	lua_Integer type;	/* section type */
-	lua_Integer flags;	/* section flags */
-	lua_Integer addr;	/* virtual address */
-	lua_Integer offset;	/* file offset */
-	lua_Integer size;	/* section size */
-	lua_Integer link;	/* link to another */
-	lua_Integer info;	/* misc info */
-	lua_Integer addralign;	/* memory alignment */
-	lua_Integer entsize;	/* table entry size */
-	int err;
+	GElf_Shdr *shdr;
 
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
+	ud = check_elf_scn_udata(L, 1);
+	shdr = push_gelf_shdr_udata(L);
 
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
+	if (gelf_getshdr(ud->scn, shdr) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
 
-		name = h->sh_name;
-		type = h->sh_type;
-		flags = h->sh_flags;
-		addr = h->sh_addr;
-		offset = h->sh_offset;
-		size = h->sh_size;
-		link = h->sh_link;
-		info = h->sh_info;
-		addralign = h->sh_addralign;
-		entsize = h->sh_entsize;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		name = h->sh_name;
-		type = h->sh_type;
-		flags = h->sh_flags;
-		addr = h->sh_addr;
-		offset = h->sh_offset;
-		size = h->sh_size;
-		link = h->sh_link;
-		info = h->sh_info;
-		addralign = h->sh_addralign;
-		entsize = h->sh_entsize;
-	}
-
-	lua_createtable(L, 0, 0);
-
-	lua_pushinteger(L, name);
-	lua_setfield(L, -2, "name");
-	lua_pushinteger(L, flags);
-	lua_setfield(L, -2, "flags");
-	lua_pushinteger(L, addr);
-	lua_setfield(L, -2, "addr");
-	lua_pushinteger(L, offset);
-	lua_setfield(L, -2, "offset");
-	lua_pushinteger(L, size);
-	lua_setfield(L, -2, "size");
-	lua_pushinteger(L, link);
-	lua_setfield(L, -2, "link");
-	lua_pushinteger(L, info);
-	lua_setfield(L, -2, "info");
-	lua_pushinteger(L, addralign);
-	lua_setfield(L, -2, "addralign");
-	lua_pushinteger(L, entsize);
-	lua_setfield(L, -2, "entsize");
-	push_constant(L, type, sht_constants);
-	lua_setfield(L, -3, "type");
-
-	return 1;
-}
-
-static int
-l_elf_scn_name(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer name;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		name = h->sh_name;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		name = h->sh_name;
-	}
-
-	lua_pushinteger(L, name);
-	return 1;
-}
-
-static int
-l_elf_scn_type(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer type;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		type = h->sh_type;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		type = h->sh_type;
-	}
-
-	push_constant(L, type, sht_constants);
-	return 1;
-}
-
-static int
-l_elf_scn_flags(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer flags;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		flags = h->sh_flags;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		flags = h->sh_flags;
-	}
-
-	lua_pushinteger(L, flags);
-	return 1;
-}
-
-static int
-l_elf_scn_addr(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer addr;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		addr = h->sh_addr;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		addr = h->sh_addr;
-	}
-
-	lua_pushinteger(L, addr);
-	return 1;
-}
-
-static int
-l_elf_scn_offset(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer offset;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		offset = h->sh_offset;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		offset = h->sh_offset;
-	}
-
-	lua_pushinteger(L, offset);
-	return 1;
-}
-
-static int
-l_elf_scn_size(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer size;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		size = h->sh_size;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		size = h->sh_size;
-	}
-
-	lua_pushinteger(L, size);
-	return 1;
-}
-
-static int
-l_elf_scn_link(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer link;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		link = h->sh_link;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		link = h->sh_link;
-	}
-
-	lua_pushinteger(L, link);
-	return 1;
-}
-
-static int
-l_elf_scn_info(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer info;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		info = h->sh_info;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		info = h->sh_info;
-	}
-
-	lua_pushinteger(L, info);
-	return 1;
-}
-
-static int
-l_elf_scn_addralign(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer addralign;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		addralign = h->sh_addralign;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		addralign = h->sh_addralign;
-	}
-
-	lua_pushinteger(L, addralign);
-	return 1;
-}
-
-static int
-l_elf_scn_entsize(lua_State *L)
-{
-	struct udataElfScn *ud;
-	lua_Integer entsize;
-	int err;
-
-	if ((err = check_elf_scn_udata_load_shdr(L, 1, &ud)) != ELF_E_NONE)
-		return push_err_results(L, err, NULL);
-
-	if (ud->flags & SHDR64) {
-		Elf64_Shdr *h = ud->shdr;
-
-		entsize = h->sh_entsize;
-	} else {
-		Elf32_Shdr *h = ud->shdr;
-
-		entsize = h->sh_entsize;
-	}
-
-	lua_pushinteger(L, entsize);
 	return 1;
 }
 
@@ -1100,16 +915,6 @@ static const luaL_Reg elf_scn_mt[] = {
 static const luaL_Reg elf_scn_index[] = {
 	{ "next", l_elf_scn_next },
 	{ "getshdr", l_elf_scn_getshdr },
-	{ "name", l_elf_scn_name },
-	{ "type", l_elf_scn_type },
-	{ "flags", l_elf_scn_flags },
-	{ "addr", l_elf_scn_addr },
-	{ "offset", l_elf_scn_offset },
-	{ "size", l_elf_scn_size },
-	{ "link", l_elf_scn_link },
-	{ "info", l_elf_scn_info },
-	{ "addralign", l_elf_scn_addralign },
-	{ "entsize", l_elf_scn_entsize },
 	{ NULL, NULL }
 };
 
@@ -1121,6 +926,9 @@ luaopen_elftoolchain(lua_State *L)
 
 	push_fields(L, ehdr_fields);
 	lua_rawsetp(L, LUA_REGISTRYINDEX, &ehdr_fields);
+
+	push_fields(L, shdr_fields);
+	lua_rawsetp(L, LUA_REGISTRYINDEX, &shdr_fields);
 
 	push_constants(L, et_constants);
 	lua_rawsetp(L, LUA_REGISTRYINDEX, &et_constants);
@@ -1141,7 +949,12 @@ luaopen_elftoolchain(lua_State *L)
 
 	luaL_newmetatable(L, ELF_EHDR_MT);
 	lua_pushstring(L, "__index");
-	lua_pushcfunction(L, l_elf_ehdr_index);
+	lua_pushcfunction(L, l_gelf_ehdr_index);
+	lua_rawset(L, -3);
+
+	luaL_newmetatable(L, ELF_SHDR_MT);
+	lua_pushstring(L, "__index");
+	lua_pushcfunction(L, l_gelf_shdr_index);
 	lua_rawset(L, -3);
 
 	luaL_newlibtable(L, elftoolchain);
