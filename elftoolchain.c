@@ -896,6 +896,8 @@ l_elf_strptr(lua_State *L)
 	char *str;
 
 	ud = check_elf_udata(L, 1, 1);
+
+	/* XXX Accept userdata and access sh_link and st_name */
 	scndx = luaL_checkinteger(L, 2);
 	stroffset = luaL_checkinteger(L, 3);
 
@@ -1233,6 +1235,7 @@ static const luaL_Reg elf_mt[] = {
 
 static const luaL_Reg elf_index[] = {
 	{ "close", l_elf_gc },
+	{ "elf_end", l_elf_gc },
 	{ "nextscn", l_elf_nextscn },
 	{ "scn", l_elf_scn },
 	{ "getehdr", l_elf_getehdr },
