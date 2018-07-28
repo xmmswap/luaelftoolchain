@@ -263,9 +263,20 @@ push_constant(lua_State *L, lua_Integer key, const struct KV constants[])
 }
 
 static int
-elf_is_closed(lua_State *L, int arg)
+error_closed_elf(lua_State *L, int arg)
 {
 	const char *errmsg = "Elf object is closed";
+
+	if (arg < 0)
+		return luaL_error(L, errmsg);
+	else
+		return luaL_argerror(L, arg, errmsg);
+}
+
+static int
+error_inactive_elf_scn(lua_State *L, int arg)
+{
+	const char *errmsg = "Elf_Scn object is inactive";
 
 	if (arg < 0)
 		return luaL_error(L, errmsg);
@@ -280,7 +291,7 @@ check_elf_udata(lua_State *L, int arg, int err_arg)
 
 	ud = (struct udataElf *)luaL_checkudata(L, arg, ELF_MT);
 	if (ud->elf == NULL)
-		elf_is_closed(L, err_arg);
+		error_closed_elf(L, err_arg);
 
 	return ud;
 }
@@ -293,10 +304,15 @@ test_elf_scn_udata(lua_State *L, int arg)
 }
 
 static struct udataElfScn *
-check_elf_scn_udata(lua_State *L, int arg)
+check_elf_scn_udata(lua_State *L, int arg, int err_arg)
 {
+	struct udataElfScn *ud;
 
-	return (struct udataElfScn *)luaL_checkudata(L, arg, ELF_SCN_MT);
+	ud = (struct udataElfScn *)luaL_checkudata(L, arg, ELF_SCN_MT);
+	if (ud->scn == NULL)
+		error_inactive_elf_scn(L, err_arg);
+
+	return ud;
 }
 
 static struct udataElfData *
@@ -872,7 +888,7 @@ l_elf_scn_next(lua_State *L)
 	struct udataElf *elf;
 	struct udataElfScn *ud;
 
-	ud = check_elf_scn_udata(L, 1);
+	ud = check_elf_scn_udata(L, 1, 1);
 	scn = ud->scn;
 
 	lua_getuservalue(L, 1);
@@ -887,7 +903,7 @@ l_elf_scn_getshdr(lua_State *L)
 	struct udataElfScn *ud;
 	GElf_Shdr *shdr;
 
-	ud = check_elf_scn_udata(L, 1);
+	ud = check_elf_scn_udata(L, 1, 1);
 	shdr = push_gelf_shdr_udata(L);
 
 	if (gelf_getshdr(ud->scn, shdr) == NULL)
@@ -936,7 +952,7 @@ l_elf_scn_getdata(lua_State *L)
 	struct udataElfData *ud;
 	Elf_Data *data;
 
-	scn = check_elf_scn_udata(L, 1);
+	scn = check_elf_scn_udata(L, 1, 1);
 	ud = test_elf_data_udata(L, 2);
 	data = ud ? ud->data : NULL;
 
@@ -948,6 +964,23 @@ l_elf_scn_getdata(lua_State *L)
 
 	return data_push(L, scn->scn, data, 1);
 }
+
+static int
+l_elf_data_next(lua_State *L)
+{
+	Elf_Data *data;
+	struct udataElfScn *scn;
+	struct udataElfData *ud;
+
+	ud = check_elf_data_udata(L, 1);
+	data = ud->data;
+
+	lua_getuservalue(L, 1);
+	scn = check_elf_scn_udata(L, -1, 1);
+
+	return data_push(L, scn->scn, data, lua_gettop(L));
+}
+
 
 /*
  * Return an iterator over Elf_Data objects.
@@ -1071,6 +1104,7 @@ static const luaL_Reg elf_data_mt[] = {
 };
 
 static const luaL_Reg elf_data_index[] = {
+	{ "next", l_elf_data_next },
 	{ NULL, NULL }
 };
 
