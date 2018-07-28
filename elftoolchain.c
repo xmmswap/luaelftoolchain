@@ -315,6 +315,13 @@ check_gelf_ehdr_udata(lua_State *L, int arg)
 	return (GElf_Ehdr *)luaL_checkudata(L, arg, ELF_EHDR_MT);
 }
 
+static GElf_Ehdr *
+test_gelf_ehdr_udata(lua_State *L, int arg)
+{
+
+	return (GElf_Ehdr *)luaL_testudata(L, arg, ELF_EHDR_MT);
+}
+
 static GElf_Shdr *
 push_gelf_shdr_udata(lua_State *L)
 {
@@ -334,6 +341,13 @@ check_gelf_shdr_udata(lua_State *L, int arg)
 {
 
 	return (GElf_Shdr *)luaL_checkudata(L, arg, ELF_SHDR_MT);
+}
+
+static GElf_Shdr *
+test_gelf_shdr_udata(lua_State *L, int arg)
+{
+
+	return (GElf_Shdr *)luaL_testudata(L, arg, ELF_SHDR_MT);
 }
 
 static int
@@ -402,6 +416,51 @@ l_gelf_ehdr_fields(lua_State *L)
 	lua_pushcfunction(L, &l_next_field);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, ehdr_fields);
 	return 2;
+}
+
+/*
+ * Return an iterator over GElf_Shdr fields.
+ */
+static int
+l_gelf_shdr_fields(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_next_field);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, shdr_fields);
+	return 2;
+}
+
+static int
+l_gelf_fields(lua_State *L)
+{
+	const char *str;
+	size_t len;
+
+	switch (lua_type(L, 1)) {
+	case LUA_TUSERDATA:
+		if (test_gelf_ehdr_udata(L, 1))
+			return l_gelf_ehdr_fields(L);
+
+		if (test_gelf_shdr_udata(L, 1))
+			return l_gelf_shdr_fields(L);
+
+		break;
+	case LUA_TSTRING:
+		str = lua_tolstring(L, 1, &len);
+
+		if (len != 4 || strcmp(str + 1, "hdr") != 0)
+			break;
+
+		if (str[0] == 'e' || str[0] == 'E')
+			return l_gelf_ehdr_fields(L);
+
+		if (str[0] == 's' || str[0] == 'S')
+			return l_gelf_shdr_fields(L);
+
+		break;
+	}
+
+	return luaL_argerror(L, 1, "expected string [EeSs]hdr or userdata");
 }
 
 /* XXX Implement l_gelf_ehdr_newindex. */
@@ -548,18 +607,6 @@ l_gelf_ehdr_index(lua_State *L)
 
 	lua_pushinteger(L, val);
 	return 1;
-}
-
-/*
- * Return an iterator over GElf_Shdr fields.
- */
-static int
-l_gelf_shdr_fields(lua_State *L)
-{
-
-	lua_pushcfunction(L, &l_next_field);
-	lua_rawgetp(L, LUA_REGISTRYINDEX, shdr_fields);
-	return 2;
 }
 
 /* XXX Implement l_gelf_shdr_newindex. */
@@ -887,6 +934,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getphdrnum", l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
 	{ "getshdr", l_elf_scn_getshdr },
+	{ "fields", l_gelf_fields },
 	{ NULL, NULL }
 };
 
