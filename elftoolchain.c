@@ -40,6 +40,7 @@ struct udataElfScn {
 
 struct udataElfData {
 	Elf_Data *data;
+	Elf_Scn *scn;
 };
 
 struct KV {
@@ -338,10 +339,21 @@ test_elf_data_udata(lua_State *L, int arg)
 }
 
 static struct udataElfData *
-check_elf_data_udata(lua_State *L, int arg)
+check_elf_data_udata(lua_State *L, int arg, bool push_uservalue)
 {
+	struct udataElfData *ud;
 
-	return luaL_checkudata(L, arg, ELF_DATA_MT);
+	ud = luaL_checkudata(L, arg, ELF_DATA_MT);
+	if (ud == NULL)
+		return ud;
+
+	lua_getuservalue(L, arg);
+	check_elf_udata(L, -1, -1);
+
+	if (!push_uservalue)
+		lua_pop(L, 1);
+
+	return ud;
 }
 
 static GElf_Ehdr *
@@ -1026,10 +1038,11 @@ l_elf_scn_getshdr(lua_State *L)
 
 /*
  * Call elf_getdata(3), wrap the returned object and push it to the L's stack.
- * Uservalue of the pushed object is set to its parent Elf_Scn object at scn_arg.
+ * The function expects parent Elf object at the top and it sets uservalue
+ * of the pushed object to that parent Elf object.
  */
 static int
-data_push(lua_State *L, Elf_Scn *scn, Elf_Data *data, int scn_arg)
+getdata_push(lua_State *L, Elf_Scn *scn, Elf_Data *data)
 {
 	struct udataElfData *ud;
 
@@ -1047,12 +1060,12 @@ data_push(lua_State *L, Elf_Scn *scn, Elf_Data *data, int scn_arg)
 	luaL_getmetatable(L, ELF_DATA_MT);
 	lua_setmetatable(L, -2);
 
-	/* Keep a reference to the parent Elf_Scn object. */
-	assert(luaL_testudata(L, scn_arg, ELF_SCN_MT) != NULL);
-	lua_pushvalue(L, scn_arg);
+	/* Keep a reference to the parent Elf object. */
+	lua_pushvalue(L, -2);
 	lua_setuservalue(L, -2);
 
 	ud->data = data;
+	ud->scn = scn;
 
 	return 1;
 }
@@ -1062,35 +1075,24 @@ l_elf_scn_getdata(lua_State *L)
 {
 	struct udataElfScn *scn;
 	struct udataElfData *ud;
-	Elf_Data *data;
 
 	scn = check_elf_scn_udata(L, 1, 1);
 	ud = test_elf_data_udata(L, 2);
-	data = ud ? ud->data : NULL;
 
-	if (data != NULL) {
-		lua_getuservalue(L, 2);
-		if (lua_touserdata(L, -1) != scn)
-			return luaL_argerror(L, 2, "different parent");
-	}
+	lua_getuservalue(L, 1);
+	check_elf_udata(L, -1, -1);
 
-	return data_push(L, scn->scn, data, 1);
+	return getdata_push(L, scn->scn, ud ? ud->data : NULL);
 }
 
 static int
 l_elf_data_next(lua_State *L)
 {
-	Elf_Data *data;
-	struct udataElfScn *scn;
 	struct udataElfData *ud;
 
-	ud = check_elf_data_udata(L, 1);
-	data = ud->data;
+	ud = check_elf_data_udata(L, 1, true);
 
-	lua_getuservalue(L, 1);
-	scn = check_elf_scn_udata(L, -1, 1);
-
-	return data_push(L, scn->scn, data, lua_gettop(L));
+	return getdata_push(L, ud->scn, ud->data);
 }
 
 
@@ -1113,7 +1115,7 @@ l_elf_data_getsym(lua_State *L)
 	GElf_Sym *sym;
 	lua_Integer ndx;
 
-	ud = check_elf_data_udata(L, 1);
+	ud = check_elf_data_udata(L, 1, false);
 	ndx = luaL_checkinteger(L, 2);
 	sym = push_gelf_sym_udata(L);
 
