@@ -392,6 +392,13 @@ push_gelf_shdr_udata(lua_State *L)
 }
 
 static GElf_Shdr *
+test_gelf_shdr_udata(lua_State *L, int arg)
+{
+
+	return luaL_testudata(L, arg, ELF_SHDR_MT);
+}
+
+static GElf_Shdr *
 check_gelf_shdr_udata(lua_State *L, int arg)
 {
 
@@ -410,6 +417,13 @@ push_gelf_sym_udata(lua_State *L)
 	lua_setmetatable(L, -2);
 
 	return ud;
+}
+
+static GElf_Sym *
+test_gelf_sym_udata(lua_State *L, int arg)
+{
+
+	return luaL_testudata(L, arg, ELF_SYM_MT);
 }
 
 static GElf_Sym *
@@ -893,14 +907,18 @@ static int
 l_elf_strptr(lua_State *L)
 {
 	struct udataElf *ud;
+	GElf_Shdr *shdr;
+	GElf_Sym *sym;
 	lua_Integer scndx, stroffset;
 	char *str;
 
 	ud = check_elf_udata(L, 1, 1);
 
-	/* XXX Accept userdata and access sh_link and st_name */
-	scndx = luaL_checkinteger(L, 2);
-	stroffset = luaL_checkinteger(L, 3);
+	shdr = test_gelf_shdr_udata(L, 2);
+	scndx = shdr ? shdr->sh_link : luaL_checkinteger(L, 2);
+
+	sym = test_gelf_sym_udata(L, 3);
+	stroffset = sym ? sym->st_name : luaL_checkinteger(L, 3);
 
 	if ((str = elf_strptr(ud->elf, scndx, stroffset)) == NULL)
 		return push_err_results(L, elf_errno(), NULL);
