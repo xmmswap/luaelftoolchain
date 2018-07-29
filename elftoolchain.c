@@ -298,23 +298,12 @@ error_closed_elf(lua_State *L, int arg)
 		return luaL_argerror(L, arg, errmsg);
 }
 
-static int
-error_inactive_elf_scn(lua_State *L, int arg)
-{
-	const char *errmsg = "Elf_Scn object is inactive";
-
-	if (arg < 0)
-		return luaL_error(L, errmsg);
-	else
-		return luaL_argerror(L, arg, errmsg);
-}
-
 static struct udataElf *
 check_elf_udata(lua_State *L, int arg, int err_arg)
 {
 	struct udataElf *ud;
 
-	ud = (struct udataElf *)luaL_checkudata(L, arg, ELF_MT);
+	ud = luaL_checkudata(L, arg, ELF_MT);
 	if (ud->elf == NULL)
 		error_closed_elf(L, err_arg);
 
@@ -324,8 +313,11 @@ check_elf_udata(lua_State *L, int arg, int err_arg)
 static struct udataElfScn *
 test_elf_scn_udata(lua_State *L, int arg)
 {
+	struct udataElfScn *ud;
 
-	return (struct udataElfScn *)luaL_testudata(L, arg, ELF_SCN_MT);
+	ud = luaL_testudata(L, arg, ELF_SCN_MT);
+	assert(ud == NULL || ud->scn != NULL);
+	return ud;
 }
 
 static struct udataElfScn *
@@ -333,10 +325,8 @@ check_elf_scn_udata(lua_State *L, int arg, int err_arg)
 {
 	struct udataElfScn *ud;
 
-	ud = (struct udataElfScn *)luaL_checkudata(L, arg, ELF_SCN_MT);
-	if (ud->scn == NULL)
-		error_inactive_elf_scn(L, err_arg);
-
+	ud = luaL_checkudata(L, arg, ELF_SCN_MT);
+	assert(ud->scn != NULL);
 	return ud;
 }
 
@@ -344,14 +334,14 @@ static struct udataElfData *
 test_elf_data_udata(lua_State *L, int arg)
 {
 
-	return (struct udataElfData *)luaL_testudata(L, arg, ELF_DATA_MT);
+	return luaL_testudata(L, arg, ELF_DATA_MT);
 }
 
 static struct udataElfData *
 check_elf_data_udata(lua_State *L, int arg)
 {
 
-	return (struct udataElfData *)luaL_checkudata(L, arg, ELF_DATA_MT);
+	return luaL_checkudata(L, arg, ELF_DATA_MT);
 }
 
 static GElf_Ehdr *
@@ -372,7 +362,7 @@ static GElf_Ehdr *
 check_gelf_ehdr_udata(lua_State *L, int arg)
 {
 
-	return (GElf_Ehdr *)luaL_checkudata(L, arg, ELF_EHDR_MT);
+	return luaL_checkudata(L, arg, ELF_EHDR_MT);
 }
 
 static GElf_Shdr *
@@ -393,7 +383,7 @@ static GElf_Shdr *
 check_gelf_shdr_udata(lua_State *L, int arg)
 {
 
-	return (GElf_Shdr *)luaL_checkudata(L, arg, ELF_SHDR_MT);
+	return luaL_checkudata(L, arg, ELF_SHDR_MT);
 }
 
 static GElf_Sym *
@@ -414,7 +404,7 @@ static GElf_Sym *
 check_gelf_sym_udata(lua_State *L, int arg)
 {
 
-	return (GElf_Sym *)luaL_checkudata(L, arg, ELF_SYM_MT);
+	return luaL_checkudata(L, arg, ELF_SYM_MT);
 }
 
 static int
@@ -438,9 +428,8 @@ l_elf_begin(lua_State *L)
 
 	filename = luaL_checkstring(L, 1);
 
-	ud = (struct udataElf *)lua_newuserdata(L, sizeof(*ud));
-	ud->elf = NULL;
-	ud->mem = NULL;
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
 
 	luaL_getmetatable(L, ELF_MT);
 	lua_setmetatable(L, -2);
@@ -956,8 +945,8 @@ nextscn_push(lua_State *L, Elf *elf, Elf_Scn *scn, int elf_arg)
 		return 1;
 	}
 
-	ud = (struct udataElfScn *)lua_newuserdata(L, sizeof(*ud));
-	ud->scn = NULL;
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
 
 	luaL_getmetatable(L, ELF_SCN_MT);
 	lua_setmetatable(L, -2);
@@ -1052,8 +1041,8 @@ data_push(lua_State *L, Elf_Scn *scn, Elf_Data *data, int scn_arg)
 		return 1;
 	}
 
-	ud = (struct udataElfData *)lua_newuserdata(L, sizeof(*ud));
-	ud->data = NULL;
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
 
 	luaL_getmetatable(L, ELF_DATA_MT);
 	lua_setmetatable(L, -2);
