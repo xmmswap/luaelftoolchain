@@ -506,6 +506,7 @@ l_elf_begin(lua_State *L)
 
 	ud = lua_newuserdata(L, sizeof(*ud));
 	memset(ud, 0, sizeof(*ud));
+	ud->fd = -1;
 
 	luaL_getmetatable(L, ELF_MT);
 	lua_setmetatable(L, -2);
