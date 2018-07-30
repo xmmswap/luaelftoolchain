@@ -1340,6 +1340,16 @@ register_index(lua_State *L, const luaL_Reg index[])
 }
 
 static void
+register_gelf_udata(lua_State *L, const char *mt, lua_CFunction index)
+{
+
+	luaL_newmetatable(L, mt);
+	lua_pushstring(L, "__index");
+	lua_pushcfunction(L, index);
+	lua_rawset(L, -3);
+}
+
+static void
 register_fields(lua_State *L, int reg, const char *mt, const char *fields[])
 {
 	size_t i;
@@ -1446,6 +1456,7 @@ static const luaL_Reg elf_data_index[] = {
 int
 luaopen_elftoolchain(lua_State *L)
 {
+
 	if (elf_version(EV_CURRENT) == EV_NONE)
 		return luaL_error(L, "ELF library is too old");
 
@@ -1467,25 +1478,10 @@ luaopen_elftoolchain(lua_State *L)
 	luaL_setfuncs(L, elf_data_mt, 0);
 	register_index(L, elf_data_index);
 
-	luaL_newmetatable(L, ELF_EHDR_MT);
-	lua_pushstring(L, "__index");
-	lua_pushcfunction(L, l_gelf_ehdr_index);
-	lua_rawset(L, -3);
-
-	luaL_newmetatable(L, ELF_PHDR_MT);
-	lua_pushstring(L, "__index");
-	lua_pushcfunction(L, l_gelf_phdr_index);
-	lua_rawset(L, -3);
-
-	luaL_newmetatable(L, ELF_SHDR_MT);
-	lua_pushstring(L, "__index");
-	lua_pushcfunction(L, l_gelf_shdr_index);
-	lua_rawset(L, -3);
-
-	luaL_newmetatable(L, ELF_SYM_MT);
-	lua_pushstring(L, "__index");
-	lua_pushcfunction(L, l_gelf_sym_index);
-	lua_rawset(L, -3);
+	register_gelf_udata(L, ELF_EHDR_MT, l_gelf_ehdr_index);
+	register_gelf_udata(L, ELF_PHDR_MT, l_gelf_phdr_index);
+	register_gelf_udata(L, ELF_SHDR_MT, l_gelf_shdr_index);
+	register_gelf_udata(L, ELF_SYM_MT, l_gelf_sym_index);
 
 	luaL_newlibtable(L, elftoolchain);
 
