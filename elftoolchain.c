@@ -24,6 +24,7 @@
 #define ELF_SCN_MT   MT_PREFIX "Elf_Scn"
 #define ELF_DATA_MT  MT_PREFIX "Elf_Data"
 
+#define ELF_DYN_MT   MT_PREFIX "GElf_Dyn"
 #define ELF_EHDR_MT  MT_PREFIX "GElf_Ehdr"
 #define ELF_PHDR_MT  MT_PREFIX "GElf_Phdr"
 #define ELF_SHDR_MT  MT_PREFIX "GElf_Shdr"
@@ -100,6 +101,16 @@ static const char *shdr_fields[] = {
 	"offset",
 	"entsize",
 	"addralign",
+	NULL
+};
+
+/*
+ * All public fields of GElf_Dyn struct.
+ */
+static const char *dyn_fields[] = {
+	"ptr",
+	"tag",
+	"val",
 	NULL
 };
 
@@ -235,6 +246,44 @@ static const struct KV em_constants[] = {
 	{ EM_Z80, "Z80" },
 	{ EM_RISCV, "RISCV" },
 	{ EM_ALPHA_EXP, "ALPHA_EXP" },
+	{ 0, NULL }
+};
+
+static const struct KV dt_constants[] = {
+	{ DT_NULL, "NULL" },
+	{ DT_NEEDED, "NEEDED" },
+	{ DT_PLTRELSZ, "PLTRELSZ" },
+	{ DT_PLTGOT, "PLTGOT" },
+	{ DT_HASH, "HASH" },
+	{ DT_STRTAB, "STRTAB" },
+	{ DT_SYMTAB, "SYMTAB" },
+	{ DT_RELA, "RELA" },
+	{ DT_RELASZ, "RELASZ" },
+	{ DT_RELAENT, "RELAENT" },
+	{ DT_STRSZ, "STRSZ" },
+	{ DT_SYMENT, "SYMENT" },
+	{ DT_INIT, "INIT" },
+	{ DT_FINI, "FINI" },
+	{ DT_SONAME, "SONAME" },
+	{ DT_RPATH, "RPATH" },
+	{ DT_SYMBOLIC, "SYMBOLIC" },
+	{ DT_REL, "REL" },
+	{ DT_RELSZ, "RELSZ" },
+	{ DT_RELENT, "RELENT" },
+	{ DT_PLTREL, "PLTREL" },
+	{ DT_DEBUG, "DEBUG" },
+	{ DT_TEXTREL, "TEXTREL" },
+	{ DT_JMPREL, "JMPREL" },
+	{ DT_BIND_NOW, "BIND_NOW" },
+	{ DT_INIT_ARRAY, "INIT_ARRAY" },
+	{ DT_FINI_ARRAY, "FINI_ARRAY" },
+	{ DT_INIT_ARRAYSZ, "INIT_ARRAYSZ" },
+	{ DT_FINI_ARRAYSZ, "FINI_ARRAYSZ" },
+	{ DT_RUNPATH, "RUNPATH" },
+	{ DT_FLAGS, "FLAGS" },
+	{ DT_ENCODING, "ENCODING" },
+	{ DT_PREINIT_ARRAY, "PREINIT_ARRAY" },
+	{ DT_PREINIT_ARRAYSZ, "PREINIT_ARRAYSZ" },
 	{ 0, NULL }
 };
 
@@ -455,6 +504,27 @@ check_gelf_shdr_udata(lua_State *L, int arg)
 	return luaL_checkudata(L, arg, ELF_SHDR_MT);
 }
 
+static GElf_Dyn *
+push_gelf_dyn_udata(lua_State *L)
+{
+	GElf_Dyn *ud;
+
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
+
+	luaL_getmetatable(L, ELF_DYN_MT);
+	lua_setmetatable(L, -2);
+
+	return ud;
+}
+
+static GElf_Dyn *
+check_gelf_dyn_udata(lua_State *L, int arg)
+{
+
+	return luaL_checkudata(L, arg, ELF_DYN_MT);
+}
+
 static GElf_Sym *
 push_gelf_sym_udata(lua_State *L)
 {
@@ -572,6 +642,18 @@ l_gelf_shdr_fields(lua_State *L)
 
 	lua_pushcfunction(L, &l_next_field);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, shdr_fields);
+	return 2;
+}
+
+/*
+ * Return an iterator over GElf_Dyn fields.
+ */
+static int
+l_gelf_dyn_fields(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_next_field);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, dyn_fields);
 	return 2;
 }
 
@@ -917,6 +999,58 @@ l_gelf_shdr_index(lua_State *L)
 		found = !strcmp(key, "addralign");
 		val = shdr->sh_addralign;
 		break;
+	}
+
+	if (!found)
+		return 0;
+
+	lua_pushinteger(L, val);
+	return 1;
+}
+
+/* XXX Implement l_gelf_dyn_newindex. */
+static int
+l_gelf_dyn_index(lua_State *L)
+{
+	GElf_Dyn *dyn;
+	const char *key;
+	size_t len;
+	lua_Integer val;
+	bool found = false;
+
+	dyn = check_gelf_dyn_udata(L, 1);
+	key = luaL_checklstring(L, 2, &len);
+
+	switch (len) {
+	case 3:
+		/* tag - entry tag value */
+		/* ptr */
+		/* val */
+		switch (key[0]) {
+		case 't':
+			if (strcmp(key, "tag") != 0)
+				break;
+
+			push_constant(L, dyn->d_tag, dt_constants);
+			return 1;
+		case 'p':
+			found = !strcmp(key, "ptr");
+			val = dyn->d_un.d_ptr;
+			break;
+		case 'v':
+			found = !strcmp(key, "val");
+			val = dyn->d_un.d_val;
+			break;
+		}
+
+		break;
+	case 6:
+		/* fields - return an iterator */
+		if (strcmp(key, "fields") != 0)
+			break;
+
+		lua_pushcfunction(L, l_gelf_dyn_fields);
+		return 1;
 	}
 
 	if (!found)
@@ -1289,6 +1423,23 @@ l_elf_scn_data(lua_State *L)
 }
 
 static int
+l_elf_data_getdyn(lua_State *L)
+{
+	struct udataElfData *ud;
+	GElf_Dyn *dyn;
+	lua_Integer ndx;
+
+	ud = check_elf_data_udata(L, 1, false);
+	ndx = luaL_checkinteger(L, 2);
+	dyn = push_gelf_dyn_udata(L);
+
+	if (gelf_getdyn(ud->data, ndx, dyn) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	return 1;
+}
+
+static int
 l_elf_data_getsym(lua_State *L)
 {
 	struct udataElfData *ud;
@@ -1404,6 +1555,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getphdr", l_elf_getphdr },
 	{ "getshdr", l_elf_scn_getshdr },
 	{ "getdata", l_elf_scn_getdata },
+	{ "getdyn", l_elf_data_getdyn },
 	{ "getsym", l_elf_data_getsym },
 	{ "fields", l_gelf_fields },
 	{ NULL, NULL }
@@ -1449,6 +1601,7 @@ static const luaL_Reg elf_data_mt[] = {
 
 static const luaL_Reg elf_data_index[] = {
 	{ "next", l_elf_data_next },
+	{ "getdyn", l_elf_data_getdyn },
 	{ "getsym", l_elf_data_getsym },
 	{ NULL, NULL }
 };
@@ -1462,6 +1615,7 @@ luaopen_elftoolchain(lua_State *L)
 
 	register_constants(L, et_constants);
 	register_constants(L, em_constants);
+	register_constants(L, dt_constants);
 	register_constants(L, pt_constants);
 	register_constants(L, sht_constants);
 	register_constants(L, stt_constants);
@@ -1481,6 +1635,7 @@ luaopen_elftoolchain(lua_State *L)
 	register_gelf_udata(L, ELF_EHDR_MT, l_gelf_ehdr_index);
 	register_gelf_udata(L, ELF_PHDR_MT, l_gelf_phdr_index);
 	register_gelf_udata(L, ELF_SHDR_MT, l_gelf_shdr_index);
+	register_gelf_udata(L, ELF_DYN_MT, l_gelf_dyn_index);
 	register_gelf_udata(L, ELF_SYM_MT, l_gelf_sym_index);
 
 	luaL_newlibtable(L, elftoolchain);
@@ -1489,6 +1644,7 @@ luaopen_elftoolchain(lua_State *L)
 	register_fields(L, -1, ELF_EHDR_MT, ehdr_fields);
 	register_fields(L, -1, ELF_PHDR_MT, phdr_fields);
 	register_fields(L, -1, ELF_SHDR_MT, shdr_fields);
+	register_fields(L, -1, ELF_DYN_MT,  dyn_fields);
 	register_fields(L, -1, ELF_SYM_MT,  sym_fields);
 
 	luaL_setfuncs(L, elftoolchain, 1);
