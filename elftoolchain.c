@@ -25,6 +25,7 @@
 #define ELF_DATA_MT  MT_PREFIX "Elf_Data"
 
 #define ELF_EHDR_MT  MT_PREFIX "GElf_Ehdr"
+#define ELF_PHDR_MT  MT_PREFIX "GElf_Phdr"
 #define ELF_SHDR_MT  MT_PREFIX "GElf_Shdr"
 #define ELF_SYM_MT   MT_PREFIX "GElf_Sym"
 
@@ -67,6 +68,21 @@ static const char *ehdr_fields[] = {
 	"shstrndx",
 	"phentsize",
 	"shentsize",
+	NULL
+};
+
+/*
+ * All public fields of GElf_Phdr struct.
+ */
+static const char *phdr_fields[] = {
+	"type",
+	"align",
+	"flags",
+	"memsz",
+	"paddr",
+	"vaddr",
+	"filesz",
+	"offset",
 	NULL
 };
 
@@ -219,6 +235,19 @@ static const struct KV em_constants[] = {
 	{ EM_Z80, "Z80" },
 	{ EM_RISCV, "RISCV" },
 	{ EM_ALPHA_EXP, "ALPHA_EXP" },
+	{ 0, NULL }
+};
+
+/* p_type values. */
+static const struct KV pt_constants[] = {
+	{ PT_NULL, "NULL" },
+	{ PT_LOAD, "LOAD" },
+	{ PT_DYNAMIC, "DYNAMIC" },
+	{ PT_INTERP, "INTERP" },
+	{ PT_NOTE, "NOTE" },
+	{ PT_SHLIB, "SHLIB" },
+	{ PT_PHDR, "PHDR" },
+	{ PT_TLS, "TLS" },
 	{ 0, NULL }
 };
 
@@ -377,6 +406,27 @@ check_gelf_ehdr_udata(lua_State *L, int arg)
 	return luaL_checkudata(L, arg, ELF_EHDR_MT);
 }
 
+static GElf_Phdr *
+push_gelf_phdr_udata(lua_State *L)
+{
+	GElf_Phdr *ud;
+
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
+
+	luaL_getmetatable(L, ELF_PHDR_MT);
+	lua_setmetatable(L, -2);
+
+	return ud;
+}
+
+static GElf_Phdr *
+check_gelf_phdr_udata(lua_State *L, int arg)
+{
+
+	return luaL_checkudata(L, arg, ELF_PHDR_MT);
+}
+
 static GElf_Shdr *
 push_gelf_shdr_udata(lua_State *L)
 {
@@ -497,6 +547,18 @@ l_gelf_ehdr_fields(lua_State *L)
 
 	lua_pushcfunction(L, &l_next_field);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, ehdr_fields);
+	return 2;
+}
+
+/*
+ * Return an iterator over GElf_Phdr fields.
+ */
+static int
+l_gelf_phdr_fields(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_next_field);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, phdr_fields);
 	return 2;
 }
 
@@ -676,6 +738,88 @@ l_gelf_ehdr_index(lua_State *L)
 		case 's':
 			found = !strcmp(key, "shentsize");
 			val = ehdr->e_shentsize;
+			break;
+		}
+
+		break;
+	}
+
+	if (!found)
+		return 0;
+
+	lua_pushinteger(L, val);
+	return 1;
+}
+
+/* XXX Implement l_gelf_phdr_newindex. */
+static int
+l_gelf_phdr_index(lua_State *L)
+{
+	GElf_Phdr *phdr;
+	const char *key;
+	size_t len;
+	lua_Integer val;
+	bool found = false;
+
+	phdr = check_gelf_phdr_udata(L, 1);
+	key = luaL_checklstring(L, 2, &len);
+
+	switch (len) {
+	case 4:
+		/* type - entry type */
+		if (strcmp(key, "type") != 0)
+			break;
+
+		push_constant(L, phdr->p_type, pt_constants);
+		return 1;
+	case 5:
+		/* align - memory & file alignment */
+		/* flags - flags */
+		/* memsz - memory size */
+		/* paddr - physical address */
+		/* vaddr - virtual address */
+		switch (key[0]) {
+		case 'a':
+			found = !strcmp(key, "align");
+			val = phdr->p_align;
+			break;
+		case 'f':
+			found = !strcmp(key, "flags");
+			val = phdr->p_flags;
+			break;
+		case 'm':
+			found = !strcmp(key, "memsz");
+			val = phdr->p_memsz;
+			break;
+		case 'p':
+			found = !strcmp(key, "paddr");
+			val = phdr->p_paddr;
+			break;
+		case 'v':
+			found = !strcmp(key, "vaddr");
+			val = phdr->p_vaddr;
+			break;
+		}
+
+		break;
+	case 6:
+		/* fields - return an iterator */
+		/* filesz - file size */
+		/* offset - offset */
+		switch (key[2]) {
+		case 'e':
+			if (strcmp(key, "fields") != 0)
+				break;
+
+			lua_pushcfunction(L, l_gelf_phdr_fields);
+			return 1;
+		case 'l':
+			found = !strcmp(key, "filesz");
+			val = phdr->p_filesz;
+			break;
+		case 'f':
+			found = !strcmp(key, "offset");
+			val = phdr->p_offset;
 			break;
 		}
 
@@ -1011,6 +1155,23 @@ l_elf_nextscn(lua_State *L)
 	return nextscn_push(L, elf->elf, scn, 1);
 }
 
+static int
+l_elf_getphdr(lua_State *L)
+{
+	struct udataElf *ud;
+	GElf_Phdr *phdr;
+	lua_Integer ndx;
+
+	ud = check_elf_udata(L, 1, 1);
+	ndx = luaL_checkinteger(L, 2);
+	phdr = push_gelf_phdr_udata(L);
+
+	if (gelf_getphdr(ud->elf, ndx, phdr) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	return 1;
+}
+
 /*
  * Return an iterator over Elf_Scn objects.
  */
@@ -1229,6 +1390,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getphdrnum", l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
 	{ "strptr", l_elf_strptr },
+	{ "getphdr", l_elf_getphdr },
 	{ "getshdr", l_elf_scn_getshdr },
 	{ "getdata", l_elf_scn_getdata },
 	{ "getsym", l_elf_data_getsym },
@@ -1248,6 +1410,7 @@ static const luaL_Reg elf_index[] = {
 	{ "nextscn", l_elf_nextscn },
 	{ "scn", l_elf_scn },
 	{ "getehdr", l_elf_getehdr },
+	{ "getphdr", l_elf_getphdr },
 	{ "getshdrnum", l_elf_getshdrnum },
 	{ "getphdrnum", l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
@@ -1287,6 +1450,7 @@ luaopen_elftoolchain(lua_State *L)
 
 	register_constants(L, et_constants);
 	register_constants(L, em_constants);
+	register_constants(L, pt_constants);
 	register_constants(L, sht_constants);
 	register_constants(L, stt_constants);
 
@@ -1307,6 +1471,11 @@ luaopen_elftoolchain(lua_State *L)
 	lua_pushcfunction(L, l_gelf_ehdr_index);
 	lua_rawset(L, -3);
 
+	luaL_newmetatable(L, ELF_PHDR_MT);
+	lua_pushstring(L, "__index");
+	lua_pushcfunction(L, l_gelf_phdr_index);
+	lua_rawset(L, -3);
+
 	luaL_newmetatable(L, ELF_SHDR_MT);
 	lua_pushstring(L, "__index");
 	lua_pushcfunction(L, l_gelf_shdr_index);
@@ -1321,6 +1490,7 @@ luaopen_elftoolchain(lua_State *L)
 
 	lua_createtable(L, 0, 0); /* upvalue */
 	register_fields(L, -1, ELF_EHDR_MT, ehdr_fields);
+	register_fields(L, -1, ELF_PHDR_MT, phdr_fields);
 	register_fields(L, -1, ELF_SHDR_MT, shdr_fields);
 	register_fields(L, -1, ELF_SYM_MT,  sym_fields);
 
