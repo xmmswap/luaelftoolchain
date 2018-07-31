@@ -519,6 +519,13 @@ push_gelf_dyn_udata(lua_State *L)
 }
 
 static GElf_Dyn *
+test_gelf_dyn_udata(lua_State *L, int arg)
+{
+
+	return luaL_testudata(L, arg, ELF_DYN_MT);
+}
+
+static GElf_Dyn *
 check_gelf_dyn_udata(lua_State *L, int arg)
 {
 
@@ -1187,6 +1194,7 @@ l_elf_strptr(lua_State *L)
 {
 	struct udataElf *ud;
 	GElf_Shdr *shdr;
+	GElf_Dyn *dyn;
 	GElf_Sym *sym;
 	lua_Integer scndx, stroffset;
 	char *str;
@@ -1196,8 +1204,13 @@ l_elf_strptr(lua_State *L)
 	shdr = test_gelf_shdr_udata(L, 2);
 	scndx = shdr ? shdr->sh_link : luaL_checkinteger(L, 2);
 
-	sym = test_gelf_sym_udata(L, 3);
-	stroffset = sym ? sym->st_name : luaL_checkinteger(L, 3);
+	dyn = test_gelf_dyn_udata(L, 3);
+	if (dyn != NULL) {
+		stroffset = dyn->d_un.d_val;
+	} else {
+		sym = test_gelf_sym_udata(L, 3);
+		stroffset = sym ? sym->st_name : luaL_checkinteger(L, 3);
+	}
 
 	if ((str = elf_strptr(ud->elf, scndx, stroffset)) == NULL)
 		return push_err_results(L, elf_errno(), NULL);
