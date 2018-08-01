@@ -1188,7 +1188,9 @@ l_elf_getshstrndx(lua_State *L)
 	return 1;
 }
 
-/* XXX Return userdata ? */
+/*
+ * XXX Return userdata ?
+ * XXX Does elf_strptr() always return a NUL-terminated string? */
 static int
 l_elf_strptr(lua_State *L)
 {
