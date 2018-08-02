@@ -32,6 +32,18 @@
 #define ELF_SHDR_MT  MT_PREFIX "GElf_Shdr"
 #define ELF_SYM_MT   MT_PREFIX "GElf_Sym"
 
+/* XXX
+#define ELF_CAP_MT     MT_PREFIX "GElf_Cap"
+#define ELF_MOVE_MT    MT_PREFIX "GElf_Move"
+#define ELF_SYMINFO_MT MT_PREFIX "GElf_Syminfo"
+
+#define ELF_ARSYM_MT   MT_PREFIX "Elf_Arsym"
+
+Elf32_Nhdr     Elf32_Section  Elf32_RegInfo  ...
+Elf32_Verdaux  Elf32_Vernaux  Elf32_Versym   Elf32_Verdef   Elf32_Verneed
+Elf32_Verdef   Elf32_Verneed  Elf32_Verdaux  Elf32_Vernaux  Elf32_Versym
+*/
+
 struct udataElf {
 	Elf *elf;
 	void *mem; /* XXX implement */
@@ -661,6 +673,17 @@ l_elf_begin(lua_State *L)
 	if ((ud->elf = elf_begin(ud->fd, ELF_C_READ, NULL)) == NULL)
 		return push_err_results(L, elf_errno(), NULL);
 
+	return 1;
+}
+
+static int
+l_elf_hash(lua_State *L)
+{
+	const char *str;
+
+	str = luaL_checkstring(L, 1);
+
+	lua_pushinteger(L, elf_hash(str));
 	return 1;
 }
 
@@ -1777,6 +1800,7 @@ register_constants(lua_State *L, const struct KV kv[])
 static const luaL_Reg elftoolchain[] = {
 	{ "begin", l_elf_begin },
 	{ "elf_end", l_elf_gc },
+	{ "hash", l_elf_hash },
 	{ "nextscn", l_elf_nextscn },
 	{ "getehdr", l_elf_getehdr },
 	{ "getshdrnum", l_elf_getshdrnum },
