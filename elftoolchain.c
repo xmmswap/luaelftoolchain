@@ -181,6 +181,11 @@ static const char *sym_fields[] = {
 	NULL
 };
 
+/*
+ * XXX
+ * ET_LOOS-ET_HIOS     Operating system specific range
+ * ET_LOPROC-ET_HIPROC Processor-specific range
+ */
 /* e_type values. */
 static const struct KV et_constants[] = {
 	{ ET_NONE, "NONE" },
@@ -303,6 +308,12 @@ static const struct KV em_constants[] = {
 	{ 0, NULL }
 };
 
+/*
+ * XXX
+ * DT_LOOS-DT_HIOS     Operating system specific range
+ * DT_LOPROC-DT_HIPROC Processor-specific range
+ */
+/* d_tag */
 static const struct KV dt_constants[] = {
 	{ DT_NULL, "NULL" },
 	{ DT_NEEDED, "NEEDED" },
@@ -338,9 +349,20 @@ static const struct KV dt_constants[] = {
 	{ DT_ENCODING, "ENCODING" },
 	{ DT_PREINIT_ARRAY, "PREINIT_ARRAY" },
 	{ DT_PREINIT_ARRAYSZ, "PREINIT_ARRAYSZ" },
+	{ DT_VERSYM, "VERSYM" },
+	{ DT_FLAGS_1, "FLAGS_1" },
+	{ DT_VERDEF, "VERDEF" },
+	{ DT_VERDEFNUM, "VERDEFNUM" },
+	{ DT_VERNEED, "VERNEED" },
+	{ DT_VERNEEDNUM, "VERNEEDNUM" },
 	{ 0, NULL }
 };
 
+/*
+ * XXX
+ * PT_LOOS-PT_HIOS     Operating system specific range
+ * PT_LOPROC-PT_HIPROC Processor-specific range
+ */
 /* p_type values. */
 static const struct KV pt_constants[] = {
 	{ PT_NULL, "NULL" },
@@ -351,9 +373,20 @@ static const struct KV pt_constants[] = {
 	{ PT_SHLIB, "SHLIB" },
 	{ PT_PHDR, "PHDR" },
 	{ PT_TLS, "TLS" },
+	{ PT_GNU_EH_FRAME, "GNU_EH_FRAME" },
+	{ PT_GNU_STACK,	"GNU_STACK" },
+	{ PT_GNU_RELRO,	"GNU_RELRO" },
+	{ PT_MIPS_REGINFO, "MIPS_REGINFO" },
+	{ PT_MIPS_ABIFLAGS, "MIPS_ABIFLAGS" },
 	{ 0, NULL }
 };
 
+/*
+ * XXX
+ * SHT_LOOS-SHT_HIOS     Operating system specific range
+ * SHT_LOPROC-SHT_HIPROC Processor-specific range
+ * SHT_LOSUNW-SHT_HISUNW
+ */
 /* sh_type values. */
 static const struct KV sht_constants[] = {
 	{ SHT_NULL, "NULL" },
@@ -398,8 +431,14 @@ static const struct KV sht_constants[] = {
 	{ SHT_MIPS_REGINFO, "MIPS_REGINFO" },
 	{ SHT_MIPS_OPTIONS, "MIPS_OPTIONS" },
 	{ SHT_MIPS_DWARF, "MIPS_DWARF" },
+	{ 0, NULL }
 };
 
+/*
+ * XXX
+ * STT_LOOS-STT_HIOS     Operating system specific range
+ * STT_LOPROC-STT_HIPROC Processor-specific range
+ */
 /* st_info values. */
 static const struct KV stt_constants[] = {
 	{ STT_NOTYPE, "NOTYPE" },
@@ -409,6 +448,8 @@ static const struct KV stt_constants[] = {
 	{ STT_FILE, "FILE" },
 	{ STT_COMMON, "COMMON" },
 	{ STT_TLS, "TLS" },
+	{ STT_GNU_IFUNC, "GNU_IFUNC" },
+	{ 0, NULL }
 };
 
 static int
