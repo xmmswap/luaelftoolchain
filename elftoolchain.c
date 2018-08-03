@@ -27,6 +27,7 @@
 #define ELF_CAP_MT   MT_PREFIX "GElf_Cap"
 #define ELF_DYN_MT   MT_PREFIX "GElf_Dyn"
 #define ELF_EHDR_MT  MT_PREFIX "GElf_Ehdr"
+#define ELF_MOVE_MT  MT_PREFIX "GElf_Move"
 #define ELF_PHDR_MT  MT_PREFIX "GElf_Phdr"
 #define ELF_RELA_MT  MT_PREFIX "GElf_Rela"
 #define ELF_REL_MT   MT_PREFIX "GElf_Rel"
@@ -34,8 +35,6 @@
 #define ELF_SYM_MT   MT_PREFIX "GElf_Sym"
 
 /* XXX
-#define ELF_CAP_MT     MT_PREFIX "GElf_Cap"
-#define ELF_MOVE_MT    MT_PREFIX "GElf_Move"
 #define ELF_SYMINFO_MT MT_PREFIX "GElf_Syminfo"
 
 #define ELF_ARSYM_MT   MT_PREFIX "Elf_Arsym"
@@ -84,6 +83,18 @@ static const char *ehdr_fields[] = {
 	"shstrndx",
 	"phentsize",
 	"shentsize",
+	NULL
+};
+
+/*
+ * All public fields of GElf_Move struct.
+ */
+static const char *move_fields[] = {
+	"info",
+	"value",
+	"repeat",
+	"stride",
+	"poffset",
 	NULL
 };
 
@@ -499,6 +510,27 @@ check_gelf_ehdr_udata(lua_State *L, int arg)
 	return luaL_checkudata(L, arg, ELF_EHDR_MT);
 }
 
+static GElf_Move *
+push_gelf_move_udata(lua_State *L)
+{
+	GElf_Move *ud;
+
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
+
+	luaL_getmetatable(L, ELF_MOVE_MT);
+	lua_setmetatable(L, -2);
+
+	return ud;
+}
+
+static GElf_Move *
+check_gelf_move_udata(lua_State *L, int arg)
+{
+
+	return luaL_checkudata(L, arg, ELF_MOVE_MT);
+}
+
 static GElf_Phdr *
 push_gelf_phdr_udata(lua_State *L)
 {
@@ -747,6 +779,18 @@ l_gelf_ehdr_fields(lua_State *L)
 }
 
 /*
+ * Return an iterator over GElf_Move fields.
+ */
+static int
+l_gelf_move_fields(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_next_field);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, move_fields);
+	return 2;
+}
+
+/*
  * Return an iterator over GElf_Phdr fields.
  */
 static int
@@ -985,6 +1029,67 @@ l_gelf_ehdr_index(lua_State *L)
 			break;
 		}
 
+		break;
+	}
+
+	if (!found)
+		return 0;
+
+	lua_pushinteger(L, val);
+	return 1;
+}
+
+/* XXX Implement l_gelf_move_newindex. */
+static int
+l_gelf_move_index(lua_State *L)
+{
+	GElf_Move *move;
+	const char *key;
+	size_t len;
+	lua_Integer val;
+	bool found = false;
+
+	move = check_gelf_move_udata(L, 1);
+	key = luaL_checklstring(L, 2, &len);
+
+	switch (len) {
+	case 4:
+		/* info - Encoded size and index. */
+		found = !strcmp(key, "info");
+		val = move->m_info;
+		break;
+	case 5:
+		/* value - Initialization value. */
+		found = !strcmp(key, "value");
+		val = move->m_value;
+		break;
+		break;
+	case 6:
+		/* fields - return an iterator */
+		/* repeat - Repeat count. */
+		/* stride - Number of units to skip. */
+		switch (key[0]) {
+		case 'f':
+			if (strcmp(key, "fields") != 0)
+				break;
+
+			lua_pushcfunction(L, l_gelf_move_fields);
+			return 1;
+		case 'r':
+			found = !strcmp(key, "repeat");
+			val = move->m_repeat;
+			break;
+		case 's':
+			found = !strcmp(key, "stride");
+			val = move->m_stride;
+			break;
+		}
+
+		break;
+	case 7:
+		/* poffset - Offset relative to symbol. */
+		found = !strcmp(key, "poffset");
+		val = move->m_poffset;
 		break;
 	}
 
@@ -1771,6 +1876,23 @@ l_elf_data_getdyn(lua_State *L)
 }
 
 static int
+l_elf_data_getmove(lua_State *L)
+{
+	struct udataElfData *ud;
+	GElf_Move *move;
+	lua_Integer ndx;
+
+	ud = check_elf_data_udata(L, 1, false);
+	ndx = luaL_checkinteger(L, 2);
+	move = push_gelf_move_udata(L);
+
+	if (gelf_getmove(ud->data, ndx, move) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	return 1;
+}
+
+static int
 l_elf_data_getrela(lua_State *L)
 {
 	struct udataElfData *ud;
@@ -1923,6 +2045,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getdata", l_elf_scn_getdata },
 	{ "getcap", l_elf_data_getcap },
 	{ "getdyn", l_elf_data_getdyn },
+	{ "getmove", l_elf_data_getmove },
 	{ "getrela", l_elf_data_getrela },
 	{ "getrel", l_elf_data_getrel },
 	{ "getsym", l_elf_data_getsym },
@@ -1972,6 +2095,7 @@ static const luaL_Reg elf_data_index[] = {
 	{ "next", l_elf_data_next },
 	{ "getcap", l_elf_data_getcap },
 	{ "getdyn", l_elf_data_getdyn },
+	{ "getmove", l_elf_data_getmove },
 	{ "getrela", l_elf_data_getrela },
 	{ "getrel", l_elf_data_getrel },
 	{ "getsym", l_elf_data_getsym },
@@ -2007,6 +2131,7 @@ luaopen_elftoolchain(lua_State *L)
 	register_gelf_udata(L, ELF_CAP_MT,  l_gelf_cap_index);
 	register_gelf_udata(L, ELF_DYN_MT,  l_gelf_dyn_index);
 	register_gelf_udata(L, ELF_EHDR_MT, l_gelf_ehdr_index);
+	register_gelf_udata(L, ELF_MOVE_MT, l_gelf_move_index);
 	register_gelf_udata(L, ELF_PHDR_MT, l_gelf_phdr_index);
 	register_gelf_udata(L, ELF_RELA_MT, l_gelf_rela_index);
 	register_gelf_udata(L, ELF_REL_MT,  l_gelf_rel_index);
@@ -2019,6 +2144,7 @@ luaopen_elftoolchain(lua_State *L)
 	register_fields(L, -1, ELF_CAP_MT,  cap_fields);
 	register_fields(L, -1, ELF_DYN_MT,  dyn_fields);
 	register_fields(L, -1, ELF_EHDR_MT, ehdr_fields);
+	register_fields(L, -1, ELF_MOVE_MT, move_fields);
 	register_fields(L, -1, ELF_PHDR_MT, phdr_fields);
 	register_fields(L, -1, ELF_RELA_MT, rela_fields);
 	register_fields(L, -1, ELF_REL_MT,  rel_fields);
