@@ -24,6 +24,7 @@
 #define ELF_SCN_MT   MT_PREFIX "Elf_Scn"
 #define ELF_DATA_MT  MT_PREFIX "Elf_Data"
 
+#define ELF_CAP_MT   MT_PREFIX "GElf_Cap"
 #define ELF_DYN_MT   MT_PREFIX "GElf_Dyn"
 #define ELF_EHDR_MT  MT_PREFIX "GElf_Ehdr"
 #define ELF_PHDR_MT  MT_PREFIX "GElf_Phdr"
@@ -115,6 +116,16 @@ static const char *shdr_fields[] = {
 	"offset",
 	"entsize",
 	"addralign",
+	NULL
+};
+
+/*
+ * All public fields of GElf_Cap struct.
+ */
+static const char *cap_fields[] = {
+	"ptr",
+	"tag",
+	"val",
 	NULL
 };
 
@@ -537,6 +548,27 @@ check_gelf_shdr_udata(lua_State *L, int arg)
 	return luaL_checkudata(L, arg, ELF_SHDR_MT);
 }
 
+static GElf_Cap *
+push_gelf_cap_udata(lua_State *L)
+{
+	GElf_Cap *ud;
+
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
+
+	luaL_getmetatable(L, ELF_CAP_MT);
+	lua_setmetatable(L, -2);
+
+	return ud;
+}
+
+static GElf_Cap *
+check_gelf_cap_udata(lua_State *L, int arg)
+{
+
+	return luaL_checkudata(L, arg, ELF_CAP_MT);
+}
+
 static GElf_Dyn *
 push_gelf_dyn_udata(lua_State *L)
 {
@@ -735,6 +767,18 @@ l_gelf_shdr_fields(lua_State *L)
 
 	lua_pushcfunction(L, &l_next_field);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, shdr_fields);
+	return 2;
+}
+
+/*
+ * Return an iterator over GElf_Cap fields.
+ */
+static int
+l_gelf_cap_fields(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_next_field);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, cap_fields);
 	return 2;
 }
 
@@ -1116,6 +1160,56 @@ l_gelf_shdr_index(lua_State *L)
 		found = !strcmp(key, "addralign");
 		val = shdr->sh_addralign;
 		break;
+	}
+
+	if (!found)
+		return 0;
+
+	lua_pushinteger(L, val);
+	return 1;
+}
+
+/* XXX Implement l_gelf_cap_newindex. */
+static int
+l_gelf_cap_index(lua_State *L)
+{
+	GElf_Cap *cap;
+	const char *key;
+	size_t len;
+	lua_Integer val;
+	bool found = false;
+
+	cap = check_gelf_cap_udata(L, 1);
+	key = luaL_checklstring(L, 2, &len);
+
+	switch (len) {
+	case 3:
+		/* tag - entry tag value */
+		/* ptr */
+		/* val */
+		switch (key[0]) {
+		case 't':
+			found = !strcmp(key, "tag");
+			val = cap->c_tag;
+			break;
+		case 'p':
+			found = !strcmp(key, "ptr");
+			val = cap->c_un.c_ptr;
+			break;
+		case 'v':
+			found = !strcmp(key, "val");
+			val = cap->c_un.c_val;
+			break;
+		}
+
+		break;
+	case 6:
+		/* fields - return an iterator */
+		if (strcmp(key, "fields") != 0)
+			break;
+
+		lua_pushcfunction(L, l_gelf_cap_fields);
+		return 1;
 	}
 
 	if (!found)
@@ -1643,6 +1737,23 @@ l_elf_scn_data(lua_State *L)
 }
 
 static int
+l_elf_data_getcap(lua_State *L)
+{
+	struct udataElfData *ud;
+	GElf_Cap *cap;
+	lua_Integer ndx;
+
+	ud = check_elf_data_udata(L, 1, false);
+	ndx = luaL_checkinteger(L, 2);
+	cap = push_gelf_cap_udata(L);
+
+	if (gelf_getcap(ud->data, ndx, cap) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	return 1;
+}
+
+static int
 l_elf_data_getdyn(lua_State *L)
 {
 	struct udataElfData *ud;
@@ -1810,6 +1921,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getphdr", l_elf_getphdr },
 	{ "getshdr", l_elf_scn_getshdr },
 	{ "getdata", l_elf_scn_getdata },
+	{ "getcap", l_elf_data_getcap },
 	{ "getdyn", l_elf_data_getdyn },
 	{ "getrela", l_elf_data_getrela },
 	{ "getrel", l_elf_data_getrel },
@@ -1858,6 +1970,7 @@ static const luaL_Reg elf_data_mt[] = {
 
 static const luaL_Reg elf_data_index[] = {
 	{ "next", l_elf_data_next },
+	{ "getcap", l_elf_data_getcap },
 	{ "getdyn", l_elf_data_getdyn },
 	{ "getrela", l_elf_data_getrela },
 	{ "getrel", l_elf_data_getrel },
@@ -1891,6 +2004,7 @@ luaopen_elftoolchain(lua_State *L)
 	luaL_setfuncs(L, elf_data_mt, 0);
 	register_index(L, elf_data_index);
 
+	register_gelf_udata(L, ELF_CAP_MT,  l_gelf_cap_index);
 	register_gelf_udata(L, ELF_DYN_MT,  l_gelf_dyn_index);
 	register_gelf_udata(L, ELF_EHDR_MT, l_gelf_ehdr_index);
 	register_gelf_udata(L, ELF_PHDR_MT, l_gelf_phdr_index);
@@ -1902,6 +2016,7 @@ luaopen_elftoolchain(lua_State *L)
 	luaL_newlibtable(L, elftoolchain);
 
 	lua_createtable(L, 0, 0); /* upvalue */
+	register_fields(L, -1, ELF_CAP_MT,  cap_fields);
 	register_fields(L, -1, ELF_DYN_MT,  dyn_fields);
 	register_fields(L, -1, ELF_EHDR_MT, ehdr_fields);
 	register_fields(L, -1, ELF_PHDR_MT, phdr_fields);
