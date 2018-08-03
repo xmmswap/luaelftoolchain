@@ -39,9 +39,8 @@
 
 #define ELF_ARSYM_MT   MT_PREFIX "Elf_Arsym"
 
-Elf32_Nhdr     Elf32_Section  Elf32_RegInfo  ...
-Elf32_Verdaux  Elf32_Vernaux  Elf32_Versym   Elf32_Verdef   Elf32_Verneed
-Elf32_Verdef   Elf32_Verneed  Elf32_Verdaux  Elf32_Vernaux  Elf32_Versym
+Elf32_Lib Elf32_Nhdr Elf32_RegInfo Elf32_Section
+Elf32_Verdaux Elf32_Verdef Elf32_Vernaux Elf32_Verneed Elf32_Versym
 */
 
 struct udataElf {
@@ -374,6 +373,31 @@ static const struct KV sht_constants[] = {
 	{ SHT_PREINIT_ARRAY, "PREINIT_ARRAY" },
 	{ SHT_GROUP, "GROUP" },
 	{ SHT_SYMTAB_SHNDX, "SYMTAB_SHNDX" },
+	{ SHT_GNU_INCREMENTAL_INPUTS, "GNU_INCREMENTAL_INPUTS" },
+	{ SHT_SUNW_dof, "SUNW_dof" },
+	{ SHT_GNU_ATTRIBUTES, "GNU_ATTRIBUTES" },
+	{ SHT_SUNW_cap, "SUNW_cap" },
+	{ SHT_SUNW_SIGNATURE, "SUNW_SIGNATURE" },
+	{ SHT_GNU_HASH, "GNU_HASH" },
+	{ SHT_GNU_LIBLIST, "GNU_LIBLIST" },
+	{ SHT_SUNW_move, "SUNW_move" },
+	{ SHT_SUNW_COMDAT, "SUNW_COMDAT" },
+	{ SHT_SUNW_syminfo, "SUNW_syminfo" },
+	{ SHT_SUNW_verdef, "SUNW_verdef" },
+	{ SHT_GNU_verdef, "GNU_verdef" },
+	{ SHT_SUNW_verneed, "SUNW_verneed" },
+	{ SHT_GNU_verneed, "GNU_verneed" },
+	{ SHT_SUNW_versym, "SUNW_versym" },
+	{ SHT_GNU_versym, "GNU_versym" },
+	{ SHT_AMD64_UNWIND, "AMD64_UNWIND" },
+	{ SHT_ARM_EXIDX, "ARM_EXIDX" },
+	{ SHT_ARM_PREEMPTMAP, "ARM_PREEMPTMAP" },
+	{ SHT_ARM_ATTRIBUTES, "ARM_ATTRIBUTES" },
+	{ SHT_ARM_DEBUGOVERLAY, "ARM_DEBUGOVERLAY" },
+	{ SHT_ARM_OVERLAYSECTION, "ARM_OVERLAYSECTION" },
+	{ SHT_MIPS_REGINFO, "MIPS_REGINFO" },
+	{ SHT_MIPS_OPTIONS, "MIPS_OPTIONS" },
+	{ SHT_MIPS_DWARF, "MIPS_DWARF" },
 };
 
 /* st_info values. */
