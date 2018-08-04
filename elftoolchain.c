@@ -21,6 +21,7 @@
 
 #define MT_PREFIX "elftoolchain."
 #define ELF_MT       MT_PREFIX "Elf"
+#define ELF_ARHDR_MT MT_PREFIX "Elf_Arhdr"
 #define ELF_SCN_MT   MT_PREFIX "Elf_Scn"
 #define ELF_DATA_MT  MT_PREFIX "Elf_Data"
 
@@ -52,6 +53,10 @@ struct udataElf {
 	int fd;
 };
 
+struct udataElfArhdr {
+	Elf_Arhdr *arhdr;
+};
+
 struct udataElfScn {
 	Elf_Scn *scn;
 };
@@ -64,6 +69,21 @@ struct udataElfData {
 struct KV {
 	lua_Integer key;
 	const char *val;
+};
+
+/*
+ * All public fields of Elf_Arhdr struct.
+ */
+static const char *arhdr_fields[] = {
+	"gid",
+	"uid",
+	"date",
+	"mode",
+	"name",
+	"size",
+	"rawname",
+	/* ar_flags is is not part of public API. */
+	NULL
 };
 
 /*
@@ -521,6 +541,16 @@ check_elf_udata(lua_State *L, int arg, int err_arg)
 	return ud;
 }
 
+static struct udataElfArhdr *
+check_elf_arhdr_udata(lua_State *L, int arg)
+{
+	struct udataElfArhdr *ud;
+
+	ud = luaL_checkudata(L, arg, ELF_ARHDR_MT);
+	assert(ud->arhdr != NULL);
+	return ud;
+}
+
 static struct udataElfScn *
 test_elf_scn_udata(lua_State *L, int arg)
 {
@@ -912,6 +942,33 @@ l_elf_hash(lua_State *L)
 }
 
 static int
+l_elf_getarhdr(lua_State *L)
+{
+	struct udataElf *elf;
+	struct udataElfArhdr *ud;
+	Elf_Arhdr *arhdr;
+
+	elf = check_elf_udata(L, 1, 1);
+
+	if ((arhdr = elf_getarhdr(elf->elf)) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
+
+	luaL_getmetatable(L, ELF_ARHDR_MT);
+	lua_setmetatable(L, -2);
+
+	/* Keep a reference to the parent Elf object. */
+	lua_pushvalue(L, 1);
+	lua_setuservalue(L, -2);
+
+	ud->arhdr = arhdr;
+
+	return 1;
+}
+
+static int
 l_elf_getehdr(lua_State *L)
 {
 	struct udataElf *ud;
@@ -971,6 +1028,18 @@ l_gelf_shdr_fields(lua_State *L)
 
 	lua_pushcfunction(L, &l_next_field);
 	lua_rawgetp(L, LUA_REGISTRYINDEX, shdr_fields);
+	return 2;
+}
+
+/*
+ * Return an iterator over Elf_Arhdr fields.
+ */
+static int
+l_elf_arhdr_fields(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_next_field);
+	lua_rawgetp(L, LUA_REGISTRYINDEX, arhdr_fields);
 	return 2;
 }
 
@@ -1437,6 +1506,84 @@ l_gelf_shdr_index(lua_State *L)
 		found = !strcmp(key, "addralign");
 		val = shdr->sh_addralign;
 		break;
+	}
+
+	if (!found)
+		return 0;
+
+	lua_pushinteger(L, val);
+	return 1;
+}
+
+static int
+l_gelf_arhdr_index(lua_State *L)
+{
+	Elf_Arhdr *arhdr;
+	const char *key;
+	size_t len;
+	lua_Integer val;
+	bool found = false;
+
+	arhdr = check_elf_arhdr_udata(L, 1)->arhdr;
+	key = luaL_checklstring(L, 2, &len);
+
+	switch (len) {
+	case 3:
+		/* gid */
+		/* uid */
+		switch (key[0]) {
+		case 'g':
+			found = !strcmp(key, "gid");
+			val = arhdr->ar_gid;
+			break;
+		case 'u':
+			found = !strcmp(key, "uid");
+			val = arhdr->ar_uid;
+			break;
+		}
+
+		break;
+	case 4:
+		/* date */
+		/* mode */
+		/* name */
+		/* size */
+		switch (key[0]) {
+		case 'd':
+			found = !strcmp(key, "date");
+			val = arhdr->ar_date;
+			break;
+		case 'm':
+			found = !strcmp(key, "mode");
+			val = arhdr->ar_mode;
+			break;
+		case 'n':
+			if (strcmp(key, "name") != 0)
+				break;
+
+			lua_pushstring(L, arhdr->ar_name);
+			return 1;
+		case 's':
+			found = !strcmp(key, "size");
+			val = arhdr->ar_size;
+			break;
+		}
+
+		break;
+	case 6:
+		/* fields - return an iterator */
+		if (strcmp(key, "fields") != 0)
+			break;
+
+		lua_pushcfunction(L, l_elf_arhdr_fields);
+		return 1;
+	case 7:
+		/* rawname */
+		if (strcmp(key, "rawname") != 0)
+			break;
+
+		lua_pushstring(L, arhdr->ar_rawname);
+		return 1;
 	}
 
 	if (!found)
@@ -2268,6 +2415,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "hash",        l_elf_hash },
 	{ "kind",        l_elf_kind },
 	{ "nextscn",     l_elf_nextscn },
+	{ "getarhdr",    l_elf_getarhdr },
 	{ "getehdr",     l_elf_getehdr },
 	{ "getshdrnum",  l_elf_getshdrnum },
 	{ "getphdrnum",  l_elf_getphdrnum },
@@ -2301,6 +2449,7 @@ static const luaL_Reg elf_index[] = {
 	{ "kind",        l_elf_kind },
 	{ "nextscn",     l_elf_nextscn },
 	{ "scn",         l_elf_scn },
+	{ "getarhdr",    l_elf_getarhdr },
 	{ "getehdr",     l_elf_getehdr },
 	{ "getphdr",     l_elf_getphdr },
 	{ "getshdrnum",  l_elf_getshdrnum },
@@ -2366,6 +2515,7 @@ luaopen_elftoolchain(lua_State *L)
 	luaL_setfuncs(L, elf_data_mt, 0);
 	register_index(L, elf_data_index);
 
+	register_gelf_udata(L, ELF_ARHDR_MT,   l_gelf_arhdr_index);
 	register_gelf_udata(L, ELF_CAP_MT,     l_gelf_cap_index);
 	register_gelf_udata(L, ELF_DYN_MT,     l_gelf_dyn_index);
 	register_gelf_udata(L, ELF_EHDR_MT,    l_gelf_ehdr_index);
@@ -2380,6 +2530,7 @@ luaopen_elftoolchain(lua_State *L)
 	luaL_newlibtable(L, elftoolchain);
 
 	lua_createtable(L, 0, 0); /* upvalue */
+	register_fields(L, -1, ELF_ARHDR_MT,   arhdr_fields);
 	register_fields(L, -1, ELF_CAP_MT,     cap_fields);
 	register_fields(L, -1, ELF_DYN_MT,     dyn_fields);
 	register_fields(L, -1, ELF_EHDR_MT,    ehdr_fields);
