@@ -839,6 +839,22 @@ l_elf_begin(lua_State *L)
 }
 
 static int
+l_elf_getbase(lua_State *L)
+{
+	struct udataElf *ud;
+	off_t base;
+
+	ud = check_elf_udata(L, 1, 1);
+	base = elf_getbase(ud->elf);
+
+	if (base == -1)
+		return push_err_results(L, elf_errno(), NULL);
+
+	lua_pushinteger(L, base);
+	return 1;
+}
+
+static int
 l_elf_hash(lua_State *L)
 {
 	const char *str;
@@ -2201,6 +2217,7 @@ register_constants(lua_State *L, const struct KV kv[])
 static const luaL_Reg elftoolchain[] = {
 	{ "begin",       l_elf_begin },
 	{ "elf_end",     l_elf_gc },
+	{ "getbase",     l_elf_getbase },
 	{ "hash",        l_elf_hash },
 	{ "nextscn",     l_elf_nextscn },
 	{ "getehdr",     l_elf_getehdr },
@@ -2229,16 +2246,17 @@ static const luaL_Reg elf_mt[] = {
 };
 
 static const luaL_Reg elf_index[] = {
-	{ "close", l_elf_gc },
-	{ "elf_end", l_elf_gc },
-	{ "nextscn", l_elf_nextscn },
-	{ "scn", l_elf_scn },
-	{ "getehdr", l_elf_getehdr },
-	{ "getphdr", l_elf_getphdr },
-	{ "getshdrnum", l_elf_getshdrnum },
-	{ "getphdrnum", l_elf_getphdrnum },
+	{ "close",       l_elf_gc },
+	{ "elf_end",     l_elf_gc },
+	{ "getbase",     l_elf_getbase },
+	{ "nextscn",     l_elf_nextscn },
+	{ "scn",         l_elf_scn },
+	{ "getehdr",     l_elf_getehdr },
+	{ "getphdr",     l_elf_getphdr },
+	{ "getshdrnum",  l_elf_getshdrnum },
+	{ "getphdrnum",  l_elf_getphdrnum },
 	{ "getshstrndx", l_elf_getshstrndx },
-	{ "strptr", l_elf_strptr },
+	{ "strptr",      l_elf_strptr },
 	{ NULL, NULL }
 };
 
