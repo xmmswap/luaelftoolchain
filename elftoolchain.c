@@ -36,11 +36,15 @@
 #define ELF_SYM_MT     MT_PREFIX "GElf_Sym"
 
 /* XXX
-#define ELF_ARSYM_MT   MT_PREFIX "Elf_Arsym"
-
-Elf32_Lib Elf32_Nhdr Elf32_RegInfo Elf32_Section
-Elf32_Verdaux Elf32_Verdef Elf32_Vernaux Elf32_Verneed Elf32_Versym
-*/
+ * #define ELF_ARSYM_MT   MT_PREFIX "Elf_Arsym"
+ *
+ * Elf32_Lib Elf32_Nhdr Elf32_RegInfo Elf32_Section
+ * Elf32_Verdaux Elf32_Verdef Elf32_Vernaux Elf32_Verneed Elf32_Versym
+ *
+ * Convert flags to Lua.
+ * Implement updates: __newindex, gelf_update_xxx() etc.
+ *
+ */
 
 struct udataElf {
 	Elf *elf;
@@ -1756,6 +1760,7 @@ l_elf_strptr(lua_State *L)
 	shdr = test_gelf_shdr_udata(L, 2);
 	scndx = shdr ? shdr->sh_link : luaL_checkinteger(L, 2);
 
+	/* XXX Test other userdata types. */
 	dyn = test_gelf_dyn_udata(L, 3);
 	if (dyn != NULL) {
 		stroffset = dyn->d_un.d_val;
