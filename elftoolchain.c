@@ -839,6 +839,26 @@ l_elf_begin(lua_State *L)
 }
 
 static int
+l_elf_checksum(lua_State *L)
+{
+	struct udataElf *ud;
+	long checksum;
+
+	ud = check_elf_udata(L, 1, 1);
+	checksum = gelf_checksum(ud->elf);
+
+	if (checksum == 0) {
+		int err = elf_errno();
+
+		if (err != ELF_E_NONE)
+			return push_err_results(L, err, NULL);
+	}
+
+	lua_pushinteger(L, checksum);
+	return 1;
+}
+
+static int
 l_elf_getbase(lua_State *L)
 {
 	struct udataElf *ud;
@@ -2243,6 +2263,7 @@ register_constants(lua_State *L, const struct KV kv[])
 static const luaL_Reg elftoolchain[] = {
 	{ "begin",       l_elf_begin },
 	{ "elf_end",     l_elf_gc },
+	{ "checksum",    l_elf_checksum },
 	{ "getbase",     l_elf_getbase },
 	{ "hash",        l_elf_hash },
 	{ "kind",        l_elf_kind },
@@ -2275,6 +2296,7 @@ static const luaL_Reg elf_mt[] = {
 static const luaL_Reg elf_index[] = {
 	{ "close",       l_elf_gc },
 	{ "elf_end",     l_elf_gc },
+	{ "checksum",    l_elf_checksum },
 	{ "getbase",     l_elf_getbase },
 	{ "kind",        l_elf_kind },
 	{ "nextscn",     l_elf_nextscn },
