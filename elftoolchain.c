@@ -855,6 +855,32 @@ l_elf_getbase(lua_State *L)
 }
 
 static int
+l_elf_kind(lua_State *L)
+{
+	struct udataElf *ud;
+	Elf_Kind kind;
+
+	ud = check_elf_udata(L, 1, 1);
+	kind = elf_kind(ud->elf);
+
+	switch (kind) {
+	case ELF_K_AR:
+		lua_pushstring(L, "AR");
+		return 1;
+	case ELF_K_ELF:
+		lua_pushstring(L, "ELF");
+		return 1;
+	case ELF_K_NONE:
+		lua_pushstring(L, "NONE");
+		return 1;
+	default:
+		lua_pushnil(L);
+		lua_pushfstring(L, "unsupported elf kind %d", (int)kind);
+		return 2;
+	}
+}
+
+static int
 l_elf_hash(lua_State *L)
 {
 	const char *str;
@@ -2219,6 +2245,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "elf_end",     l_elf_gc },
 	{ "getbase",     l_elf_getbase },
 	{ "hash",        l_elf_hash },
+	{ "kind",        l_elf_kind },
 	{ "nextscn",     l_elf_nextscn },
 	{ "getehdr",     l_elf_getehdr },
 	{ "getshdrnum",  l_elf_getshdrnum },
@@ -2249,6 +2276,7 @@ static const luaL_Reg elf_index[] = {
 	{ "close",       l_elf_gc },
 	{ "elf_end",     l_elf_gc },
 	{ "getbase",     l_elf_getbase },
+	{ "kind",        l_elf_kind },
 	{ "nextscn",     l_elf_nextscn },
 	{ "scn",         l_elf_scn },
 	{ "getehdr",     l_elf_getehdr },
