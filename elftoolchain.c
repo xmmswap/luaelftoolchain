@@ -2005,17 +2005,6 @@ l_elf_gc(lua_State *L)
 	return 0;
 }
 
-static int
-l_elf_tostring(lua_State *L)
-{
-	struct udataElf *ud;
-
-	ud = check_elf_udata(L, 1, 1);
-
-	lua_pushfstring(L, "Elf%s@%p", ud->elf ? "" : "(closed)", ud);
-	return 1;
-}
-
 /*
  * Call elf_nextscn(3), wrap the returned object and push it to the L's stack.
  * Uservalue of the pushed object is set to its parent Elf object at elf_arg.
@@ -2320,30 +2309,6 @@ l_elf_data_getsym(lua_State *L)
 	return 1;
 }
 
-static int
-l_elf_scn_tostring(lua_State *L)
-{
-	struct udataElfScn *ud;
-
-	ud = test_elf_scn_udata(L, 1);
-	assert(ud != NULL);
-
-	lua_pushfstring(L, "Elf_Scn%s@%p", ud->scn ? "" : "(inactive)", ud);
-	return 1;
-}
-
-static int
-l_elf_data_tostring(lua_State *L)
-{
-	struct udataElfData *ud;
-
-	ud = test_elf_data_udata(L, 1);
-	assert(ud != NULL);
-
-	lua_pushfstring(L, "Elf_Data%s@%p", ud->data ? "" : "(inactive)", ud);
-	return 1;
-}
-
 static void
 register_index(lua_State *L, const luaL_Reg index[])
 {
@@ -2437,7 +2402,6 @@ static const luaL_Reg elftoolchain[] = {
 
 static const luaL_Reg elf_mt[] = {
 	{ "__gc", l_elf_gc },
-	{ "__tostring", l_elf_tostring },
 	{ NULL, NULL }
 };
 
@@ -2460,7 +2424,6 @@ static const luaL_Reg elf_index[] = {
 };
 
 static const luaL_Reg elf_scn_mt[] = {
-	{ "__tostring", l_elf_scn_tostring },
 	{ NULL, NULL }
 };
 
@@ -2473,7 +2436,6 @@ static const luaL_Reg elf_scn_index[] = {
 };
 
 static const luaL_Reg elf_data_mt[] = {
-	{ "__tostring", l_elf_data_tostring },
 	{ NULL, NULL }
 };
 
