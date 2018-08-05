@@ -2006,6 +2006,31 @@ l_elf_gc(lua_State *L)
 }
 
 /*
+ * Wrap the scn object and push it to the L's stack. Uservalue of
+ * the pushed object is set to its parent Elf object at elf_arg.
+ */
+static int
+push_elf_scn(lua_State *L, Elf_Scn *scn, int elf_arg)
+{
+	struct udataElfScn *ud;
+
+	ud = lua_newuserdata(L, sizeof(*ud));
+	memset(ud, 0, sizeof(*ud));
+
+	luaL_getmetatable(L, ELF_SCN_MT);
+	lua_setmetatable(L, -2);
+
+	/* Keep a reference to the parent Elf object. */
+	assert(luaL_testudata(L, elf_arg, ELF_MT) != NULL);
+	lua_pushvalue(L, elf_arg);
+	lua_setuservalue(L, -2);
+
+	ud->scn = scn;
+
+	return 1;
+}
+
+/*
  * Call elf_nextscn(3), wrap the returned object and push it to the L's stack.
  * Uservalue of the pushed object is set to its parent Elf object at elf_arg.
  */
@@ -2036,6 +2061,22 @@ nextscn_push(lua_State *L, Elf *elf, Elf_Scn *scn, int elf_arg)
 	ud->scn = scn;
 
 	return 1;
+}
+
+static int
+l_elf_getscn(lua_State *L)
+{
+	struct udataElf *elf;
+	Elf_Scn *scn;
+	size_t ndx;
+
+	elf = check_elf_udata(L, 1, 1);
+	ndx = luaL_checkinteger(L, 2);
+
+	if ((scn = elf_getscn(elf->elf, ndx)) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	return push_elf_scn(L, scn, 1);
 }
 
 static int
@@ -2462,6 +2503,7 @@ static const luaL_Reg elftoolchain[] = {
 	{ "getbase",     l_elf_getbase },
 	{ "hash",        l_elf_hash },
 	{ "kind",        l_elf_kind },
+	{ "getscn",      l_elf_getscn },
 	{ "ndxscn",      l_elf_ndxscn },
 	{ "nextscn",     l_elf_nextscn },
 	{ "getarhdr",    l_elf_getarhdr },
@@ -2495,6 +2537,7 @@ static const luaL_Reg elf_index[] = {
 	{ "checksum",    l_elf_checksum },
 	{ "getbase",     l_elf_getbase },
 	{ "kind",        l_elf_kind },
+	{ "getscn",      l_elf_getscn },
 	{ "nextscn",     l_elf_nextscn },
 	{ "sections",    l_elf_sections },
 	{ "segments",    l_elf_segments },
