@@ -2088,6 +2088,57 @@ l_elf_sections(lua_State *L)
 }
 
 static int
+l_elf_phdr_iter(lua_State *L)
+{
+	struct udataElf *elf;
+	Elf_Phdr *phdr;
+	lua_Integer ndx;
+	size_t phnum;
+
+	/* Iterator state is { elfobj, ndx } */
+	lua_rawgeti(L, 1, 1);
+	lua_rawgeti(L, 1, 2);
+
+	ndx = lua_tointeger(L, -1);
+	elf = check_elf_udata(L, -2, -2);
+
+	if (elf_getphdrnum(elf->elf, &phnum) != 0)
+		return push_err_results(L, elf_errno(), NULL);
+
+	if (ndx >= phnum)
+		return 0;
+
+	phdr = push_gelf_phdr_udata(L);
+
+	if (gelf_getphdr(elf->elf, ndx, phdr) == NULL)
+		return push_err_results(L, elf_errno(), NULL);
+
+	lua_pushinteger(L, ndx + 1);
+	lua_rawseti(L, 1, 2);
+
+	return 1;
+}
+
+/*
+ * Return an iterator over Elf_Phdr objects.
+ */
+static int
+l_elf_segments(lua_State *L)
+{
+
+	lua_pushcfunction(L, &l_elf_phdr_iter);
+
+	/* Iterator state is { elfobj, ndx } */
+	lua_createtable(L, 2, 0);
+	lua_pushvalue(L, 1);
+	lua_rawseti(L, -2, 1);
+	lua_pushinteger(L, 0);
+	lua_rawseti(L, -2, 2);
+
+	return 2;
+}
+
+static int
 l_elf_scn_nextscn(lua_State *L)
 {
 	Elf_Scn *scn;
@@ -2413,6 +2464,7 @@ static const luaL_Reg elf_index[] = {
 	{ "kind",        l_elf_kind },
 	{ "nextscn",     l_elf_nextscn },
 	{ "sections",    l_elf_sections },
+	{ "segments",    l_elf_segments },
 	{ "getarhdr",    l_elf_getarhdr },
 	{ "getehdr",     l_elf_getehdr },
 	{ "getphdr",     l_elf_getphdr },
