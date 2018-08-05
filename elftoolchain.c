@@ -2090,7 +2090,7 @@ l_elf_getphdr(lua_State *L)
  * Return an iterator over Elf_Scn objects.
  */
 static int
-l_elf_scn(lua_State *L)
+l_elf_sections(lua_State *L)
 {
 
 	lua_pushcfunction(L, &l_elf_nextscn);
@@ -2448,7 +2448,7 @@ static const luaL_Reg elf_index[] = {
 	{ "getbase",     l_elf_getbase },
 	{ "kind",        l_elf_kind },
 	{ "nextscn",     l_elf_nextscn },
-	{ "scn",         l_elf_scn },
+	{ "sections",    l_elf_sections },
 	{ "getarhdr",    l_elf_getarhdr },
 	{ "getehdr",     l_elf_getehdr },
 	{ "getphdr",     l_elf_getphdr },
