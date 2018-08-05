@@ -2088,7 +2088,7 @@ l_elf_sections(lua_State *L)
 }
 
 static int
-l_elf_scn_next(lua_State *L)
+l_elf_scn_nextscn(lua_State *L)
 {
 	Elf_Scn *scn;
 	struct udataElf *elf;
@@ -2428,7 +2428,7 @@ static const luaL_Reg elf_scn_mt[] = {
 };
 
 static const luaL_Reg elf_scn_index[] = {
-	{ "next", l_elf_scn_next },
+	{ "nextscn", l_elf_scn_nextscn },
 	{ "getshdr", l_elf_scn_getshdr },
 	{ "getdata", l_elf_scn_getdata },
 	{ "data", l_elf_scn_data },
