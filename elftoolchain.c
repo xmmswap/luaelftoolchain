@@ -1712,6 +1712,7 @@ l_gelf_rela_index(lua_State *L)
 	case 4:
 		/* info - index & type of relocation */
 		found = !strcmp(key, "info");
+		/* XXX ELF_R_TYPE ELF_R_SYM */
 		val = rela->r_info;
 		break;
 	case 6:
@@ -1853,6 +1854,7 @@ l_gelf_sym_index(lua_State *L)
 			if (strcmp(key, "info") != 0)
 				break;
 
+			/* XXX ELF_ST_BIND ELF_ST_TYPE ELF_ST_INFO */
 			push_constant(L, sym->st_info, stt_constants);
 			return 1;
 		case 'n':
@@ -1873,6 +1875,7 @@ l_gelf_sym_index(lua_State *L)
 		switch (key[0]) {
 		case 'o':
 			found = !strcmp(key, "other");
+			/* XXX ELF_ST_VISIBILITY */
 			val = sym->st_other;
 			break;
 		case 's':
