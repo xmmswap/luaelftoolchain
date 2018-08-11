@@ -526,6 +526,19 @@ l_next_field(lua_State *L)
 	return 1;
 }
 
+static const struct KV *
+find_constant(const char *str, const struct KV constants[])
+{
+	size_t i;
+
+	for (i = 0; constants[i].val != NULL; i++) {
+		if (strcmp(str, constants[i].val) == 0)
+			return &constants[i];
+	}
+
+	return NULL;
+}
+
 /*
  * [-0, +2-1, -]
  * Push a string constant if key is found in constants, push key otherwise.
@@ -2203,14 +2216,15 @@ l_elf_phdr_iter(lua_State *L)
 	struct udataElf *elf;
 	Elf_Phdr *phdr;
 	lua_Integer ndx;
-	size_t phnum;
+	size_t phnum, tlen;
 
-	/* Iterator state is { elfobj, ndx } */
+	/* Iterator state is { elfobj, ndx [, type...] } */
 	lua_rawgeti(L, 1, 1);
 	lua_rawgeti(L, 1, 2);
 
 	ndx = lua_tointeger(L, -1);
 	elf = check_elf_udata(L, -2, -2);
+	tlen = lua_rawlen(L, 1);
 
 	if (elf_getphdrnum(elf->elf, &phnum) != 0)
 		return push_err_results(L, elf_errno(), NULL);
@@ -2223,6 +2237,28 @@ l_elf_phdr_iter(lua_State *L)
 	if (gelf_getphdr(elf->elf, ndx, phdr) == NULL)
 		return push_err_results(L, elf_errno(), NULL);
 
+	while (tlen >= 3) {
+		size_t i;
+		lua_Integer t;
+
+		for (i = 3; i <= tlen; i++) {
+			lua_rawgeti(L, 1, i);
+			t = lua_tointeger(L, -1);
+			lua_pop(L, 1);
+
+			if (t == phdr->p_type)
+				goto out;
+		}
+
+		ndx++;
+
+		if (ndx >= phnum)
+			return 0;
+		if (gelf_getphdr(elf->elf, ndx, phdr) == NULL)
+			return push_err_results(L, elf_errno(), NULL);
+	}
+
+out:
 	lua_pushinteger(L, ndx + 1);
 	lua_rawseti(L, 1, 2);
 
@@ -2235,15 +2271,31 @@ l_elf_phdr_iter(lua_State *L)
 static int
 l_elf_segments(lua_State *L)
 {
+	const struct KV *kv;
+	const char *str;
+	int i, top;
+
+	luaL_checkany(L, 1); /* l_elf_phdr_iter will check udata later. */
+	top = lua_gettop(L);
 
 	lua_pushcfunction(L, &l_elf_phdr_iter);
 
-	/* Iterator state is { elfobj, ndx } */
-	lua_createtable(L, 2, 0);
+	/* Iterator state is { elfobj, ndx [, type...] } */
+	lua_createtable(L, 1 + top, 0);
 	lua_pushvalue(L, 1);
 	lua_rawseti(L, -2, 1);
 	lua_pushinteger(L, 0);
 	lua_rawseti(L, -2, 2);
+
+	for (i = 2; i <= top; i++) {
+		str = luaL_checkstring(L, i);
+
+		if ((kv = find_constant(str, pt_constants)) == NULL)
+			return luaL_argerror(L, i, "unrecognised PT constant");
+
+		lua_pushinteger(L, kv->key);
+		lua_rawseti(L, -2, 1 + i);
+	}
 
 	return 2;
 }
