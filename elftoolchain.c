@@ -204,12 +204,13 @@ static const char *syminfo_fields[] = {
  * All public fields of GElf_Sym struct.
  */
 static const char *sym_fields[] = {
-	"info",
+	"bind", "type", /* info - type / binding attrs */
 	"name",
 	"size",
 	"other",
 	"shndx",
 	"value",
+	"visibility",
 	NULL
 };
 
@@ -468,6 +469,19 @@ static const struct KV sht_constants[] = {
 
 /*
  * XXX
+ * STB_LOOS-STB_HIOS     Operating system specific range
+ * STB_LOPROC-STB_HIPROC Processor-specific range
+ */
+/* st_info: Symbol Bindings */
+static const struct KV stb_constants[] = {
+	{ STB_LOCAL, "LOCAL" },
+	{ STB_GLOBAL, "GLOBAL" },
+	{ STB_WEAK, "WEAK" },
+	{ 0, NULL }
+};
+
+/*
+ * XXX
  * STT_LOOS-STT_HIOS     Operating system specific range
  * STT_LOPROC-STT_HIPROC Processor-specific range
  */
@@ -481,6 +495,18 @@ static const struct KV stt_constants[] = {
 	{ STT_COMMON, "COMMON" },
 	{ STT_TLS, "TLS" },
 	{ STT_GNU_IFUNC, "GNU_IFUNC" },
+	{ 0, NULL }
+};
+
+/* st_other: Visibility Types */
+static const struct KV stv_constants[] = {
+	{ STV_DEFAULT, "DEFAULT" },
+	{ STV_INTERNAL, "INTERNAL" },
+	{ STV_HIDDEN, "HIDDEN" },
+	{ STV_PROTECTED, "PROTECTED" },
+	{ STV_EXPORTED, "EXPORTED" },
+	{ STV_SINGLETON, "SINGLETON" },
+	{ STV_ELIMINATE, "ELIMINATE" },
 	{ 0, NULL }
 };
 
@@ -1850,12 +1876,19 @@ l_gelf_sym_index(lua_State *L)
 		/* name - Symbol name (.strtab index) */
 		/* size - size of symbol */
 		switch (key[0]) {
-		case 'i':
-			if (strcmp(key, "info") != 0)
+		case 'b':
+			if (strcmp(key, "bind") != 0)
 				break;
 
-			/* XXX ELF_ST_BIND ELF_ST_TYPE ELF_ST_INFO */
-			push_constant(L, sym->st_info, stt_constants);
+			push_constant(L, ELF_ST_BIND(sym->st_info),
+			    stb_constants);
+			return 1;
+		case 't':
+			if (strcmp(key, "type") != 0)
+				break;
+
+			push_constant(L, ELF_ST_TYPE(sym->st_info),
+			    stt_constants);
 			return 1;
 		case 'n':
 			found = !strcmp(key, "name");
@@ -1874,10 +1907,11 @@ l_gelf_sym_index(lua_State *L)
 		/* value - value of symbol */
 		switch (key[0]) {
 		case 'o':
-			found = !strcmp(key, "other");
-			/* XXX ELF_ST_VISIBILITY */
-			val = sym->st_other;
-			break;
+			if (strcmp(key, "other") != 0)
+				break;
+
+			push_constant(L, sym->st_other, stv_constants);
+			return 1;
 		case 's':
 			found = !strcmp(key, "shndx");
 			val = sym->st_shndx;
@@ -1895,6 +1929,13 @@ l_gelf_sym_index(lua_State *L)
 			break;
 
 		lua_pushcfunction(L, l_gelf_sym_fields);
+		return 1;
+	case 10:
+		if (strcmp(key, "visibility") != 0)
+			break;
+
+		push_constant(L, ELF_ST_VISIBILITY(sym->st_other),
+		    stv_constants);
 		return 1;
 	}
 
@@ -2595,7 +2636,9 @@ luaopen_elftoolchain(lua_State *L)
 	register_constants(L, dt_constants);
 	register_constants(L, pt_constants);
 	register_constants(L, sht_constants);
+	register_constants(L, stb_constants);
 	register_constants(L, stt_constants);
+	register_constants(L, stv_constants);
 
 	luaL_newmetatable(L, ELF_MT);
 	luaL_setfuncs(L, elf_mt, 0);
