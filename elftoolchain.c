@@ -176,7 +176,8 @@ static const char *dyn_fields[] = {
  * All public fields of GElf_Rela struct.
  */
 static const char *rela_fields[] = {
-	"info",
+	"sym",
+	"type",
 	"offset",
 	"addend",
 	NULL
@@ -186,7 +187,8 @@ static const char *rela_fields[] = {
  * All public fields of GElf_Rel struct.
  */
 static const char *rel_fields[] = {
-	"info",
+	"sym",
+	"type",
 	"offset",
 	NULL
 };
@@ -1735,11 +1737,14 @@ l_gelf_rela_index(lua_State *L)
 	key = luaL_checklstring(L, 2, &len);
 
 	switch (len) {
+	case 3:
+		found = !strcmp(key, "sym");
+		val = ELF64_R_SYM(rela->r_info);
+		break;
 	case 4:
-		/* info - index & type of relocation */
-		found = !strcmp(key, "info");
-		/* XXX ELF_R_TYPE ELF_R_SYM */
-		val = rela->r_info;
+		/* XXX Import R_* constants from <<arch>>>/elf_machdep.h */
+		found = !strcmp(key, "type");
+		val = ELF64_R_TYPE(rela->r_info);
 		break;
 	case 6:
 		/* fields - return an iterator */
@@ -1786,10 +1791,14 @@ l_gelf_rel_index(lua_State *L)
 	key = luaL_checklstring(L, 2, &len);
 
 	switch (len) {
+	case 3:
+		found = !strcmp(key, "sym");
+		val = ELF64_R_SYM(rel->r_info);
+		break;
 	case 4:
-		/* info - index & type of relocation */
-		found = !strcmp(key, "info");
-		val = rel->r_info;
+		/* XXX Import R_* constants from <<arch>>>/elf_machdep.h */
+		found = !strcmp(key, "type");
+		val = ELF64_R_TYPE(rel->r_info);
 		break;
 	case 6:
 		/* fields - return an iterator */
