@@ -2009,8 +2009,25 @@ l_elf_getshstrndx(lua_State *L)
 	/*
 	 * Unlike elf_getshdrnum(3) and elf_getphdrnum(3),
 	 * elf_getshstrndx(3) returns 0 in case of an error.
+	 * NOTE elf_getshstrndx(3) is deprecated, use
+	 * elf_getshdrstrndx(3) instead.
 	 */
 	if (elf_getshstrndx(ud->elf, &ndx) == 0)
+		return push_err_results(L, elf_errno(), NULL);
+
+	lua_pushinteger(L, ndx);
+	return 1;
+}
+
+static int
+l_elf_getshdrstrndx(lua_State *L)
+{
+	struct udataElf *ud;
+	size_t ndx;
+
+	ud = check_elf_udata(L, 1, 1);
+
+	if (elf_getshdrstrndx(ud->elf, &ndx) != 0)
 		return push_err_results(L, elf_errno(), NULL);
 
 	lua_pushinteger(L, ndx);
@@ -2602,32 +2619,33 @@ register_constants(lua_State *L, const struct KV kv[])
 }
 
 static const luaL_Reg elftoolchain[] = {
-	{ "begin",       l_elf_begin },
-	{ "elf_end",     l_elf_gc },
-	{ "checksum",    l_elf_checksum },
-	{ "getbase",     l_elf_getbase },
-	{ "hash",        l_elf_hash },
-	{ "kind",        l_elf_kind },
-	{ "getscn",      l_elf_getscn },
-	{ "ndxscn",      l_elf_ndxscn },
-	{ "nextscn",     l_elf_nextscn },
-	{ "getarhdr",    l_elf_getarhdr },
-	{ "getehdr",     l_elf_getehdr },
-	{ "getshdrnum",  l_elf_getshdrnum },
-	{ "getphdrnum",  l_elf_getphdrnum },
-	{ "getshstrndx", l_elf_getshstrndx },
-	{ "strptr",      l_elf_strptr },
-	{ "getphdr",     l_elf_getphdr },
-	{ "getshdr",     l_elf_scn_getshdr },
-	{ "getdata",     l_elf_scn_getdata },
-	{ "getcap",      l_elf_data_getcap },
-	{ "getdyn",      l_elf_data_getdyn },
-	{ "getmove",     l_elf_data_getmove },
-	{ "getrela",     l_elf_data_getrela },
-	{ "getrel",      l_elf_data_getrel },
-	{ "getsyminfo",  l_elf_data_getsyminfo },
-	{ "getsym",      l_elf_data_getsym },
-	{ "fields",      l_gelf_fields },
+	{ "begin",         l_elf_begin },
+	{ "elf_end",       l_elf_gc },
+	{ "checksum",      l_elf_checksum },
+	{ "getbase",       l_elf_getbase },
+	{ "hash",          l_elf_hash },
+	{ "kind",          l_elf_kind },
+	{ "getscn",        l_elf_getscn },
+	{ "ndxscn",        l_elf_ndxscn },
+	{ "nextscn",       l_elf_nextscn },
+	{ "getarhdr",      l_elf_getarhdr },
+	{ "getehdr",       l_elf_getehdr },
+	{ "getshdrnum",    l_elf_getshdrnum },
+	{ "getphdrnum",    l_elf_getphdrnum },
+	{ "getshstrndx",   l_elf_getshstrndx },
+	{ "getshdrstrndx", l_elf_getshdrstrndx },
+	{ "strptr",        l_elf_strptr },
+	{ "getphdr",       l_elf_getphdr },
+	{ "getshdr",       l_elf_scn_getshdr },
+	{ "getdata",       l_elf_scn_getdata },
+	{ "getcap",        l_elf_data_getcap },
+	{ "getdyn",        l_elf_data_getdyn },
+	{ "getmove",       l_elf_data_getmove },
+	{ "getrela",       l_elf_data_getrela },
+	{ "getrel",        l_elf_data_getrel },
+	{ "getsyminfo",    l_elf_data_getsyminfo },
+	{ "getsym",        l_elf_data_getsym },
+	{ "fields",        l_gelf_fields },
 	{ NULL, NULL }
 };
 
@@ -2637,22 +2655,23 @@ static const luaL_Reg elf_mt[] = {
 };
 
 static const luaL_Reg elf_index[] = {
-	{ "close",       l_elf_gc },
-	{ "elf_end",     l_elf_gc },
-	{ "checksum",    l_elf_checksum },
-	{ "getbase",     l_elf_getbase },
-	{ "kind",        l_elf_kind },
-	{ "getscn",      l_elf_getscn },
-	{ "nextscn",     l_elf_nextscn },
-	{ "sections",    l_elf_sections },
-	{ "segments",    l_elf_segments },
-	{ "getarhdr",    l_elf_getarhdr },
-	{ "getehdr",     l_elf_getehdr },
-	{ "getphdr",     l_elf_getphdr },
-	{ "getshdrnum",  l_elf_getshdrnum },
-	{ "getphdrnum",  l_elf_getphdrnum },
-	{ "getshstrndx", l_elf_getshstrndx },
-	{ "strptr",      l_elf_strptr },
+	{ "close",         l_elf_gc },
+	{ "elf_end",       l_elf_gc },
+	{ "checksum",      l_elf_checksum },
+	{ "getbase",       l_elf_getbase },
+	{ "kind",          l_elf_kind },
+	{ "getscn",        l_elf_getscn },
+	{ "nextscn",       l_elf_nextscn },
+	{ "sections",      l_elf_sections },
+	{ "segments",      l_elf_segments },
+	{ "getarhdr",      l_elf_getarhdr },
+	{ "getehdr",       l_elf_getehdr },
+	{ "getphdr",       l_elf_getphdr },
+	{ "getshdrnum",    l_elf_getshdrnum },
+	{ "getphdrnum",    l_elf_getphdrnum },
+	{ "getshstrndx",   l_elf_getshstrndx },
+	{ "getshdrstrndx", l_elf_getshdrstrndx },
+	{ "strptr",        l_elf_strptr },
 	{ NULL, NULL }
 };
 
@@ -2665,7 +2684,7 @@ static const luaL_Reg elf_scn_index[] = {
 	{ "nextscn", l_elf_scn_nextscn },
 	{ "getshdr", l_elf_scn_getshdr },
 	{ "getdata", l_elf_scn_getdata },
-	{ "data", l_elf_scn_data },
+	{ "data",    l_elf_scn_data },
 	{ NULL, NULL }
 };
 
