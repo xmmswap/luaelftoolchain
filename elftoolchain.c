@@ -1752,12 +1752,12 @@ l_gelf_rela_index(lua_State *L)
 	switch (len) {
 	case 3:
 		found = !strcmp(key, "sym");
-		val = ELF64_R_SYM(rela->r_info);
+		val = GELF_R_SYM(rela->r_info);
 		break;
 	case 4:
 		/* XXX Import R_* constants from <<arch>>>/elf_machdep.h */
 		found = !strcmp(key, "type");
-		val = ELF64_R_TYPE(rela->r_info);
+		val = GELF_R_TYPE(rela->r_info);
 		break;
 	case 6:
 		/* fields - return an iterator */
@@ -1806,12 +1806,12 @@ l_gelf_rel_index(lua_State *L)
 	switch (len) {
 	case 3:
 		found = !strcmp(key, "sym");
-		val = ELF64_R_SYM(rel->r_info);
+		val = GELF_R_SYM(rel->r_info);
 		break;
 	case 4:
 		/* XXX Import R_* constants from <<arch>>>/elf_machdep.h */
 		found = !strcmp(key, "type");
-		val = ELF64_R_TYPE(rel->r_info);
+		val = GELF_R_TYPE(rel->r_info);
 		break;
 	case 6:
 		/* fields - return an iterator */
