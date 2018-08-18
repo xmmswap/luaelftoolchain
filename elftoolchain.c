@@ -2233,15 +2233,17 @@ l_elf_phdr_iter(lua_State *L)
 	struct udataElf *elf;
 	Elf_Phdr *phdr;
 	lua_Integer ndx;
-	size_t phnum, tlen;
+	size_t phnum;
+	int arg3;
 
-	/* Iterator state is { elfobj, ndx [, type...] } */
+	/* Iterator state is { elfobj, ndx [, ptype or { ptype=true ...} ] } */
 	lua_rawgeti(L, 1, 1);
 	lua_rawgeti(L, 1, 2);
+	lua_rawgeti(L, 1, 3);
 
-	ndx = lua_tointeger(L, -1);
-	elf = check_elf_udata(L, -2, -2);
-	tlen = lua_rawlen(L, 1);
+	elf = check_elf_udata(L, -3, -3);
+	ndx = lua_tointeger(L, -2);
+	arg3 = lua_type(L, -1);
 
 	if (elf_getphdrnum(elf->elf, &phnum) != 0)
 		return push_err_results(L, elf_errno(), NULL);
@@ -2254,25 +2256,43 @@ l_elf_phdr_iter(lua_State *L)
 	if (gelf_getphdr(elf->elf, ndx, phdr) == NULL)
 		return push_err_results(L, elf_errno(), NULL);
 
-	while (tlen >= 3) {
-		size_t i;
-		lua_Integer t;
+	switch (arg3) {
+		lua_Integer ptype;
+		int rtype;
+	case LUA_TNUMBER:
+		ptype = lua_tointeger(L, -2);
 
-		for (i = 3; i <= tlen; i++) {
-			lua_rawgeti(L, 1, i);
-			t = lua_tointeger(L, -1);
-			lua_pop(L, 1);
-
-			if (t == phdr->p_type)
+		while (true) {
+			if (phdr->p_type == ptype)
 				goto out;
+
+			ndx++;
+
+			if (ndx >= phnum)
+				return 0;
+			if (gelf_getphdr(elf->elf, ndx, phdr) == NULL)
+				return push_err_results(L, elf_errno(), NULL);
 		}
+		break;
+	case LUA_TTABLE:
+		while (true) {
+			lua_pushinteger(L, phdr->p_type);
+			rtype = lua_rawget(L, -3);
+			lua_remove(L, -1);
 
-		ndx++;
+			if (rtype == LUA_TBOOLEAN)
+				goto out;
 
-		if (ndx >= phnum)
-			return 0;
-		if (gelf_getphdr(elf->elf, ndx, phdr) == NULL)
-			return push_err_results(L, elf_errno(), NULL);
+			ndx++;
+
+			if (ndx >= phnum)
+				return 0;
+			if (gelf_getphdr(elf->elf, ndx, phdr) == NULL)
+				return push_err_results(L, elf_errno(), NULL);
+		}
+		break;
+	default:
+		break;
 	}
 
 out:
@@ -2297,22 +2317,43 @@ l_elf_segments(lua_State *L)
 
 	lua_pushcfunction(L, &l_elf_phdr_iter);
 
-	/* Iterator state is { elfobj, ndx [, type...] } */
-	lua_createtable(L, 1 + top, 0);
+	/* Iterator state is { elfobj, ndx [, ptype or { ptype=true ...} ] } */
+	lua_createtable(L, top < 2 ? 2 : 3, 0);
 	lua_pushvalue(L, 1);
 	lua_rawseti(L, -2, 1);
 	lua_pushinteger(L, 0);
 	lua_rawseti(L, -2, 2);
 
-	for (i = 2; i <= top; i++) {
+	if (top >= 2) {
+		str = luaL_checkstring(L, 2);
+
+		if ((kv = find_constant(str, pt_constants)) == NULL)
+			return luaL_argerror(L, 2, "unrecognised PT constant");
+
+		if (top == 2) {
+			lua_pushinteger(L, kv->key);
+			lua_rawseti(L, -2, 3);
+		} else {
+			lua_createtable(L, 0, top - 1); /* { ptype=true ... } */
+			lua_pushinteger(L, kv->key);
+			lua_pushboolean(L, true);
+			lua_rawset(L, -3);
+		}
+	}
+
+	for (i = 3; i <= top; i++) {
 		str = luaL_checkstring(L, i);
 
 		if ((kv = find_constant(str, pt_constants)) == NULL)
 			return luaL_argerror(L, i, "unrecognised PT constant");
 
 		lua_pushinteger(L, kv->key);
-		lua_rawseti(L, -2, 1 + i);
+		lua_pushboolean(L, true);
+		lua_rawset(L, -3);
 	}
+
+	if (top >= 3)
+		lua_rawseti(L, -2, 3);
 
 	return 2;
 }
