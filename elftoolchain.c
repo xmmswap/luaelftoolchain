@@ -1295,7 +1295,7 @@ l_gelf_ehdr_index(lua_State *L)
 	case 8:
 		/* shstrndx - String table index */
 		found = !strcmp(key, "shstrndx");
-		val = ehdr->e_shstrndx;
+		val = ehdr->e_shstrndx; /* XXX SHN_XINDEX */
 		break;
 	case 9:
 		/* phentsize - Program header entry size */
@@ -1936,7 +1936,7 @@ l_gelf_sym_index(lua_State *L)
 			return 1;
 		case 's':
 			found = !strcmp(key, "shndx");
-			val = sym->st_shndx;
+			val = sym->st_shndx; /* XXX "UNDEF" for SHN_UNDEF etc */
 			break;
 		case 'v':
 			found = !strcmp(key, "value");
