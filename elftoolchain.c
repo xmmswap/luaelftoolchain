@@ -2312,7 +2312,7 @@ l_elf_segments(lua_State *L)
 	const char *str;
 	int i, top;
 
-	luaL_checkany(L, 1); /* l_elf_phdr_iter will check udata later. */
+	(void)check_elf_udata(L, 1, 1);
 	top = lua_gettop(L);
 
 	lua_pushcfunction(L, &l_elf_phdr_iter);
