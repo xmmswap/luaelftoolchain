@@ -2359,22 +2359,6 @@ l_elf_segments(lua_State *L)
 }
 
 static int
-l_elf_scn_ndxscn(lua_State *L)
-{
-	struct udataElfScn *ud;
-	size_t ndx;
-
-	ud = check_elf_scn_udata(L, 1, 1);
-	ndx = elf_ndxscn(ud->scn);
-
-	if (ndx == SHN_UNDEF)
-		return push_err_results(L, elf_errno(), NULL);
-
-	lua_pushinteger(L, ndx);
-	return 1;
-}
-
-static int
 l_elf_scn_nextscn(lua_State *L)
 {
 	Elf_Scn *scn;
@@ -2721,7 +2705,7 @@ static const luaL_Reg elf_scn_mt[] = {
 };
 
 static const luaL_Reg elf_scn_index[] = {
-	{ "ndxscn",  l_elf_scn_ndxscn },
+	{ "ndxscn",  l_elf_ndxscn },
 	{ "nextscn", l_elf_scn_nextscn },
 	{ "getshdr", l_elf_scn_getshdr },
 	{ "getdata", l_elf_scn_getdata },
