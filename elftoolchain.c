@@ -2185,6 +2185,7 @@ l_elf_nextscn(lua_State *L)
 	struct udataElfScn *ud;
 	Elf_Scn *scn;
 
+	/* Iterator state is elfobj. */
 	elf = check_elf_udata(L, 1, 1);
 	ud = test_elf_scn_udata(L, 2);
 	scn = ud ? ud->scn : NULL;
@@ -2215,15 +2216,130 @@ l_elf_getphdr(lua_State *L)
 	return 1;
 }
 
+static int
+l_elf_shdr_iter(lua_State *L)
+{
+	GElf_Shdr shdr;
+	struct udataElf *elf;
+	struct udataElfScn *ud;
+	Elf_Scn *scn;
+	int arg2, top;
+
+	/* Iterator state is { elfobj, stype or { stype=true ...} }. */
+	lua_rawgeti(L, 1, 1);
+	lua_rawgeti(L, 1, 2);
+
+	elf = check_elf_udata(L, -2, -2);
+	arg2 = lua_type(L, -1);
+	top = lua_gettop(L);
+
+	ud = test_elf_scn_udata(L, 2);
+	scn = ud ? ud->scn : NULL;
+
+	if (ud != NULL) {
+		lua_getuservalue(L, 2);
+		if (lua_touserdata(L, -1) != elf)
+			return luaL_argerror(L, 2, "different parent");
+	}
+
+	switch (arg2) {
+		lua_Integer stype;
+		int rtype;
+	case LUA_TNUMBER:
+		stype = lua_tointeger(L, top);
+
+		while (true) {
+			/* XXX Documentation isn't clear about how to detect an error. */
+			if ((scn = elf_nextscn(elf->elf, scn)) == NULL)
+				return 0;
+
+			if (gelf_getshdr(scn, &shdr) == NULL)
+				return push_err_results(L, elf_errno(), NULL);
+
+			if (shdr.sh_type == stype)
+				goto out;
+		}
+		break;
+	case LUA_TTABLE:
+		while (true) {
+			/* XXX Documentation isn't clear about how to detect an error. */
+			if ((scn = elf_nextscn(elf->elf, scn)) == NULL)
+				return 0;
+
+			if (gelf_getshdr(scn, &shdr) == NULL)
+				return push_err_results(L, elf_errno(), NULL);
+
+			lua_pushinteger(L, shdr.sh_type);
+			rtype = lua_rawget(L, -2);
+			lua_settop(L, top);
+
+			if (rtype == LUA_TBOOLEAN)
+				goto out;
+		}
+		break;
+	default:
+		break;
+	}
+
+out:
+	push_elf_scn(L, scn, top - 1);
+	return 1;
+}
+
 /*
  * Return an iterator over Elf_Scn objects.
  */
 static int
 l_elf_sections(lua_State *L)
 {
+	const struct KV *kv;
+	const char *str;
+	int i, top;
 
-	lua_pushcfunction(L, &l_elf_nextscn);
+	(void)check_elf_udata(L, 1, 1);
+	top = lua_gettop(L);
+
+	if (top == 1) {
+		lua_pushcfunction(L, &l_elf_nextscn);
+		/* Iterator state is elfobj. */
+		lua_pushvalue(L, 1);
+		return 2;
+	}
+
+	lua_pushcfunction(L, &l_elf_shdr_iter);
+
+	/* Iterator state is { elfobj, stype or { stype=true ...} }. */
+	lua_createtable(L, 2, 0);
 	lua_pushvalue(L, 1);
+	lua_rawseti(L, -2, 1);
+
+	str = luaL_checkstring(L, 2);
+
+	if ((kv = find_constant(str, sht_constants)) == NULL)
+		return luaL_argerror(L, 2, "unrecognised SHT constant");
+
+	if (top == 2) {
+		lua_pushinteger(L, kv->key);
+	} else {
+		lua_createtable(L, 0, top - 1); /* { stype=true ...} */
+		lua_pushinteger(L, kv->key);
+		lua_pushboolean(L, true);
+		lua_rawset(L, -3);
+	}
+
+	for (i = 3; i <= top; i++) {
+		str = luaL_checkstring(L, i);
+
+		if ((kv = find_constant(str, sht_constants)) == NULL)
+			return luaL_argerror(L, i, "unrecognised SHT constant");
+
+		lua_pushinteger(L, kv->key);
+		lua_pushboolean(L, true);
+		lua_rawset(L, -3);
+	}
+
+	lua_rawseti(L, -2, 2);
+
 	return 2;
 }
 
@@ -2234,9 +2350,9 @@ l_elf_phdr_iter(lua_State *L)
 	Elf_Phdr *phdr;
 	lua_Integer ndx;
 	size_t phnum;
-	int arg3;
+	int arg3, top;
 
-	/* Iterator state is { elfobj, ndx [, ptype or { ptype=true ...} ] } */
+	/* Iterator state is { elfobj, ndx [, ptype or { ptype=true ...} ] }. */
 	lua_rawgeti(L, 1, 1);
 	lua_rawgeti(L, 1, 2);
 	lua_rawgeti(L, 1, 3);
@@ -2252,6 +2368,7 @@ l_elf_phdr_iter(lua_State *L)
 		return 0;
 
 	phdr = push_gelf_phdr_udata(L);
+	top = lua_gettop(L);
 
 	if (gelf_getphdr(elf->elf, ndx, phdr) == NULL)
 		return push_err_results(L, elf_errno(), NULL);
@@ -2278,7 +2395,7 @@ l_elf_phdr_iter(lua_State *L)
 		while (true) {
 			lua_pushinteger(L, phdr->p_type);
 			rtype = lua_rawget(L, -3);
-			lua_remove(L, -1);
+			lua_settop(L, top);
 
 			if (rtype == LUA_TBOOLEAN)
 				goto out;
@@ -2317,7 +2434,7 @@ l_elf_segments(lua_State *L)
 
 	lua_pushcfunction(L, &l_elf_phdr_iter);
 
-	/* Iterator state is { elfobj, ndx [, ptype or { ptype=true ...} ] } */
+	/* Iterator state is { elfobj, ndx [, ptype or { ptype=true ...} ] }. */
 	lua_createtable(L, top < 2 ? 2 : 3, 0);
 	lua_pushvalue(L, 1);
 	lua_rawseti(L, -2, 1);
@@ -2334,7 +2451,7 @@ l_elf_segments(lua_State *L)
 			lua_pushinteger(L, kv->key);
 			lua_rawseti(L, -2, 3);
 		} else {
-			lua_createtable(L, 0, top - 1); /* { ptype=true ... } */
+			lua_createtable(L, 0, top - 1); /* { ptype=true ...} */
 			lua_pushinteger(L, kv->key);
 			lua_pushboolean(L, true);
 			lua_rawset(L, -3);
